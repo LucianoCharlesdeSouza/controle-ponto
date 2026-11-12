@@ -50,6 +50,7 @@ describe('Apuracao de Jornada', () => {
       { dataHoraLocal: '2026-11-10T08:00:00', natureza: 'trabalho' }
     ];
     const resultado = apurarDia(marcacoes, valorHora);
+    // Verifica apenas se a frase "Período em aberto" está no texto
     expect(resultado.inconsistencias[0]).toContain('Período em aberto');
   });
 });

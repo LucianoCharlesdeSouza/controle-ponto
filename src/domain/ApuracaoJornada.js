@@ -10,8 +10,13 @@ export function apurarDia(marcacoes, valorHoraCentavos) {
     return { minutosTrabalhados: 0, valorCentavos: 0, periodos: [], inconsistencias: [] };
   }
 
+  // NOVO: Filtra as marcações anuladas
+  const marcs = marcacoes
+    .filter(m => !m.anulada) // <--- A MÁGICA ACONTECE AQUI
+    .sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal));  
+
   // Ordena por data/hora (segurança)
-  const marcs = [...marcacoes].sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal));
+  // const marcs = [...marcacoes].sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal));
 
   let periodosTrabalhados = [];
   let inconsistencias = [];
@@ -25,14 +30,16 @@ export function apurarDia(marcacoes, valorHoraCentavos) {
     if (marcacao.natureza === 'trabalho') {
       if (inicioPeriodoAtual) {
         // Duas marcações de trabalho seguidas
-        inconsistencias.push(`Marcação dupla de trabalho às ${marcacao.dataHoraLocal}`);
+        const horaFormatada = new Date(marcacao.dataHoraLocal).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        inconsistencias.push(`Marcação dupla de trabalho às ${horaFormatada}`);
       } else {
         inicioPeriodoAtual = new Date(marcacao.dataHoraLocal);
       }
     } else if (marcacao.natureza === 'pausa') {
       if (!inicioPeriodoAtual) {
         // Pausa sem ter iniciado trabalho
-        inconsistencias.push(`Pausa sem trabalho anterior às ${marcacao.dataHoraLocal}`);
+        const horaFormatada = new Date(marcacao.dataHoraLocal).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        inconsistencias.push(`Pausa sem trabalho anterior às ${horaFormatada}`);
       } else {
         const fimPeriodo = new Date(marcacao.dataHoraLocal);
         const diffMs = fimPeriodo - inicioPeriodoAtual;
@@ -54,10 +61,14 @@ export function apurarDia(marcacoes, valorHoraCentavos) {
   }
 
   // Verifica se ficou um período aberto no fim do dia
+  // if (inicioPeriodoAtual) {
+  //   inconsistencias.push(`Período em aberto (sem pausa/saída final) iniciado às ${inicioPeriodoAtual.toISOString()}`);
+  // }
   if (inicioPeriodoAtual) {
-    inconsistencias.push(`Período em aberto (sem pausa/saída final) iniciado às ${inicioPeriodoAtual.toISOString()}`);
+    // Formata a hora local no padrão HH:mm (ex: 13:10)
+    const horaFormatada = inicioPeriodoAtual.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    inconsistencias.push(`Período em aberto (sem pausa/saída final) iniciado às ${horaFormatada}`);
   }
-
   // Cálculo do valor
   const valorCentavos = calcularValorPago(minutosTrabalhados, valorHoraCentavos);
 

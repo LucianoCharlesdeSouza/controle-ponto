@@ -34,5 +34,8 @@ RUN if getent passwd "${UID}" > /dev/null; then \
 
 USER ${USER_NAME}
 
+COPY --chown=${USER_NAME}:${USER_NAME} package.json package-lock.json ./
+RUN npm ci
+
 EXPOSE 5173
 

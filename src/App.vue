@@ -1,61 +1,84 @@
+<!-- src/App.vue -->
 <template>
-  <header class="topbar">
-    <!-- v-if: só mostra o botão se não estivermos na Home -->
-    <button v-if="!isHome" @click="voltar" class="back" aria-label="Voltar">‹</button>
-    <h1>{{ tituloPagina }}</h1>
-  </header>
+  <div class="app-wrapper">
+    <!-- O conteúdo das páginas é renderizado aqui -->
+    <main class="page-content">
+      <router-view />
+    </main>
 
-  <main id="app-content">
-    <!-- O componente da rota atual é injetado aqui -->
-    <router-view />
-  </main>
-
-  <div id="toast" class="toast" v-if="toastMensagem">
-    {{ toastMensagem }}
+    <!-- Menu inferior fixo -->
+    <nav class="bottom-nav">
+      <router-link to="/" class="nav-item">
+        <span class="icon">🏠</span>
+        <span class="text">Início</span>
+      </router-link>
+      <router-link to="/ponto" class="nav-item">
+        <span class="icon">⏱️</span>
+        <span class="text">Ponto</span>
+      </router-link>
+      <router-link to="/colaboradores" class="nav-item">
+        <span class="icon">👥</span>
+        <span class="text">Equipe</span>
+      </router-link>
+      <router-link to="/ajustes" class="nav-item">
+        <span class="icon">📝</span>
+        <span class="text">Ajustes</span>
+      </router-link>      
+      <router-link to="/relatorios" class="nav-item">
+        <span class="icon">📊</span>
+        <span class="text">Relatórios</span>
+      </router-link>
+      <router-link to="/configuracoes" class="nav-item">
+        <span class="icon">⚙️</span>
+        <span class="text">Configurações</span>
+      </router-link>      
+    </nav>
   </div>
 </template>
 
-<script setup>
-import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-
-const route = useRoute()
-const router = useRouter()
-
-// Verifica se estamos na rota inicial
-const isHome = computed(() => route.name === 'home')
-
-// Pega o título da rota (definiremos isso no router)
-const tituloPagina = computed(() => route.meta.title || 'Vendas Rural')
-
-// Função simples para voltar
-const voltar = () => {
-  router.back()
-}
-
-// Simulando um toast global (opcional por enquanto)
-import { ref } from 'vue'
-const toastMensagem = ref('')
-</script>
-
 <style scoped>
-.topbar {
-  background: var(--primary);
-  color: white;
-  padding: 16px;
-  padding-top: max(16px, env(safe-area-inset-top));
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+.app-wrapper {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  min-height: 100vh;
+  padding-bottom: 70px; /* Espaço para o menu */
 }
 
-.topbar h1 {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0;
+.page-content {
   flex: 1;
+}
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 65px;
+  background: var(--color-surface, #fff);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+  z-index: 100;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+  color: var(--color-muted, #64748b);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.nav-item .icon {
+  font-size: 1.5rem;
+  margin-bottom: 2px;
+}
+
+/* Estilo para quando a rota está ativa */
+.nav-item.router-link-active {
+  color: var(--color-primary, #2563eb);
 }
 </style>

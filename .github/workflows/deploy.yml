@@ -1,4 +1,4 @@
-name: Deploy PWA Vendas Rural to GitHub Pages
+name: Deploy PWA Controle de Ponto to GitHub Pages
 
 on:
   push:
