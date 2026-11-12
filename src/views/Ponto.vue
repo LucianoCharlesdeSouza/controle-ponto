@@ -1,7 +1,8 @@
-<!-- src/views/Home.vue -->
+<!-- src/views/Ponto.vue -->
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { getAllItems, addItem } from '../infrastructure/database.js';
+import { apurarDia } from '../domain/ApuracaoJornada.js';
 import { v4 as uuidv4 } from 'uuid';
 
 // Estado
@@ -9,19 +10,22 @@ const motivos = ref([]);
 const colaboradores = ref([]);
 const colaboradorSelecionadoId = ref('');
 const marcacoesHoje = ref([]);
-
+const valoresHora = ref([]);
 const registrando = ref(false);
 
 // Carregar dados
 onMounted(async () => {
-  // Busca todos e filtra apenas os ativos, ordenando pela ordem
   const todosMotivos = await getAllItems('motivos');
   motivos.value = todosMotivos
-    .filter(m => m.ativo !== false) // Se por acaso algum for undefined (antigo), considera ativo
+    .filter(m => m.ativo !== false)
     .sort((a, b) => a.ordem - b.ordem);
     
-  colaboradores.value = (await getAllItems('colaboradores')).filter(c => c.situacao === 'ativo');
+  colaboradores.value = (await getAllItems('colaboradores'))
+    .filter(c => c.situacao === 'ativo')
+    .sort((a, b) => a.nome.localeCompare(b.nome));
   
+  valoresHora.value = await getAllItems('valoresHora');
+
   if (colaboradores.value.length > 0) {
     colaboradorSelecionadoId.value = colaboradores.value[0].id;
   }
@@ -29,42 +33,54 @@ onMounted(async () => {
   await carregarMarcacoesHoje();
 });
 
-// Formatar data para exibição
 const dataAtual = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
 
-// Filtrar marcações do colaborador logado
+// Filtra marcações do colaborador selecionado
 const minhasMarcacoesHoje = computed(() => {
   return marcacoesHoje.value
     .filter(m => m.colaboradorId === colaboradorSelecionadoId.value)
     .sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal));
 });
 
+// Calcula as horas trabalhadas hoje para o colaborador selecionado
+const resumoHoje = computed(() => {
+  if (!colaboradorSelecionadoId.value) return { minutos: 0, horasStr: '0h 00m' };
+  
+  const marcs = minhasMarcacoesHoje.value;
+  const valorHora = valoresHora.value.find(v => v.colaboradorId === colaboradorSelecionadoId.value)?.valorCentavos || 0;
+  
+  const apuracao = apurarDia(marcs, valorHora);
+  const min = apuracao.minutosTrabalhados;
+  
+  return {
+    minutos: min,
+    horasStr: `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`
+  };
+});
+
+const colaboradorAtualNome = computed(() => {
+  return colaboradores.value.find(c => c.id === colaboradorSelecionadoId.value)?.nome || 'Nenhum';
+});
+
 async function carregarMarcacoesHoje() {
   const todas = await getAllItems('marcacoes');
   
-  // Pega a data local do dispositivo no formato YYYY-MM-DD
   const agora = new Date();
   const ano = agora.getFullYear();
   const mes = String(agora.getMonth() + 1).padStart(2, '0');
   const dia = String(agora.getDate()).padStart(2, '0');
   const hojeStr = `${ano}-${mes}-${dia}`; 
   
-  // Filtra usando a data local correta
   marcacoesHoje.value = todas.filter(m => m.dataHoraLocal.startsWith(hojeStr));
 }
 
 async function registrarPonto(motivo) {
-  if (!colaboradorSelecionadoId.value) {
-    alert('Selecione um colaborador primeiro.');
-    return;
-  }
-
-    // TRAVA DE SEGURANÇA CONTRA DUPLO CLIQUE
+  if (!colaboradorSelecionadoId.value) return;
   if (registrando.value) return; 
+  
   registrando.value = true;
 
   const agora = new Date();
-  // Ajuste de fuso horário para garantir hora local exata
   const offset = agora.getTimezoneOffset() * 60000;
   const dataHoraLocal = new Date(agora.getTime() - offset).toISOString().slice(0, 19);
 
@@ -82,157 +98,205 @@ async function registrarPonto(motivo) {
   try {
     await addItem('marcacoes', novaMarcacao);
     await carregarMarcacoesHoje();
-    // Feedback tátil se disponível
     if (navigator.vibrate) navigator.vibrate(50);
   } catch (e) {
     alert('Erro ao registrar ponto: ' + e);
-  }finally {
-    // Libera a trava após 2 segundos
+  } finally {
     setTimeout(() => { registrando.value = false; }, 2000); 
   }
 }
 </script>
 
 <template>
-  <div class="ponto-container">
-    <header class="header">
-      <h1>Registrar Ponto</h1>
-      <p class="date">{{ dataAtual }}</p>
+  <div class="page-container">
+    <header>
+      <h1 class="page-title">Registrar Ponto</h1>
+      <p class="page-subtitle">{{ dataAtual }}</p>
     </header>
 
+    <!-- Seletor de Colaborador (Scroll Horizontal) -->
+    <div class="colaborador-selector no-print">
+      <button 
+        v-for="colab in colaboradores" 
+        :key="colab.id"
+        @click="colaboradorSelecionadoId = colab.id"
+        class="colab-pill"
+        :class="{ active: colaboradorSelecionadoId === colab.id }"
+      >
+        {{ colab.nome.split(' ')[0] }} <!-- Mostra só o primeiro nome para não quebrar -->
+      </button>
+    </div>
 
-    <main class="main-content">
-      <!-- Seleção de Colaborador -->
-      <div class="card">
-        <label for="colaborador" class="label">Colaborador:</label>
-        <select id="colaborador" v-model="colaboradorSelecionadoId" class="input-select">
-          <option v-for="colab in colaboradores" :key="colab.id" :value="colab.id">
-            {{ colab.nome }}
-          </option>
-        </select>
+    <!-- Painel de Status Atual -->
+    <div class="status-panel card">
+      <div class="status-header">
+        <span class="status-name">{{ colaboradorAtualNome }}</span>
+        <span class="status-time">{{ resumoHoje.horasStr }}</span>
       </div>
+      <p class="status-label">Total trabalhado hoje</p>
+    </div>
 
-      <!-- Botões de Ação -->
-      <div class="actions-grid">
-        <button 
-          v-for="motivo in motivos" 
-          :key="motivo.id"
-          @click="registrarPonto(motivo)"
-          class="btn-ponto"
-          :class="motivo.natureza === 'trabalho' ? 'btn-entrada' : 'btn-pausa'"
-          :disabled="registrando"
-        >
-          {{ motivo.nome }}
-        </button>
-      </div>
+    <!-- Botões de Ação (Gigantes) -->
+    <div class="actions-grid">
+      <button 
+        v-for="motivo in motivos" 
+        :key="motivo.id"
+        @click="registrarPonto(motivo)"
+        class="btn-action"
+        :class="motivo.natureza === 'trabalho' ? 'btn-entrada' : 'btn-pausa'"
+        :disabled="registrando"
+      >
+        <!-- Ícone dinâmico baseado na natureza -->
+        <span class="action-icon">{{ motivo.natureza === 'trabalho' ? '▶️' : '⏸️' }}</span>
+        <span class="action-text">{{ motivo.nome }}</span>
+      </button>
+    </div>
 
-      <!-- Histórico do Dia -->
-      <div class="card historico">
-        <h2>Histórico de Hoje</h2>
-        <ul v-if="minhasMarcacoesHoje.length > 0">
-          <li v-for="marc in minhasMarcacoesHoje" :key="marc.id">
-            <span class="hora">{{ new Date(marc.dataHoraLocal).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}</span>
-            <span class="motivo">{{ motivos.find(m => m.id === marc.motivoId)?.nome || 'Motivo removido' }}</span>
-          </li>
-        </ul>
-        <p v-else class="empty-state">Nenhuma marcação registrada hoje.</p>
-      </div>
-    </main>
+    <!-- Histórico do Dia -->
+    <div class="card">
+      <h2 class="section-title">Histórico de Hoje</h2>
+      <ul v-if="minhasMarcacoesHoje.length > 0" class="history-list">
+        <li v-for="marc in minhasMarcacoesHoje" :key="marc.id">
+          <div class="history-time">{{ new Date(marc.dataHoraLocal).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}</div>
+          <div class="history-motivo" :class="marc.natureza">{{ motivos.find(m => m.id === marc.motivoId)?.nome || 'Removido' }}</div>
+        </li>
+      </ul>
+      <p v-else class="empty-state">Nenhuma marcação registrada hoje.</p>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.ponto-container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 16px;
+/* Seletor de Colaborador */
+.colaborador-selector {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 16px;
+  margin-bottom: 8px;
+  -webkit-overflow-scrolling: touch; /* Scroll suave no iOS */
 }
-.header {
+.colaborador-selector::-webkit-scrollbar { display: none; } /* Esconde a barra de rolagem */
+
+.colab-pill {
+  background: white;
+  border: 2px solid #e2e8f0;
+  padding: 10px 20px;
+  border-radius: var(--radius-full);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--color-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.colab-pill.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+}
+
+/* Painel de Status */
+.status-panel {
+  background: var(--color-primary);
+  color: white;
   text-align: center;
+  padding: 24px;
+  border: none;
+  border-radius: var(--radius-lg);
   margin-bottom: 24px;
+  box-shadow: var(--shadow-md);
 }
-.header h1 {
-  color: var(--color-primary, #2563eb);
-  margin: 0;
-}
-.date {
-  color: var(--color-muted, #64748b);
-  font-size: 1.1rem;
-  text-transform: capitalize;
-}
-.card {
-  background: var(--color-surface, #fff);
-  padding: 16px;
-  border-radius: var(--radius-md, 10px);
-  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08));
-  margin-bottom: 24px;
-}
-.label {
-  display: block;
-  font-weight: bold;
+.status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
   margin-bottom: 8px;
 }
-.input-select {
-  width: 100%;
-  padding: 12px;
+.status-name {
   font-size: 1.1rem;
-  border-radius: var(--radius-sm, 6px);
-  border: 1px solid #ccc;
+  font-weight: 600;
+  opacity: 0.9;
 }
+.status-time {
+  font-size: 2rem;
+  font-weight: 800;
+}
+.status-label {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Botões de Ação Gigantes */
 .actions-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(2, 1fr); /* 2 colunas no celular */
+  gap: 16px;
+  margin-bottom: 32px;
 }
-.btn-ponto {
-  padding: 20px 10px;
-  font-size: 1.1rem;
-  font-weight: bold;
+@media (min-width: 600px) {
+  .actions-grid { grid-template-columns: repeat(3, 1fr); } /* 3 colunas no PC */
+}
+
+.btn-action {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 12px;
   border: none;
-  border-radius: var(--radius-md, 10px);
-  cursor: pointer;
-  transition: transform 0.1s, opacity 0.2s;
-  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08));
+  border-radius: var(--radius-lg);
+  font-size: 1.1rem;
+  font-weight: 700;
   color: white;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: var(--shadow-sm);
 }
-.btn-ponto:active {
-  transform: scale(0.95);
-}
-.btn-entrada {
-  background-color: var(--color-success, #16a34a);
-}
-.btn-pausa {
-  background-color: var(--color-warning, #d97706);
-}
-.historico h2 {
-  font-size: 1.2rem;
-  margin-top: 0;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 8px;
-}
-.historico ul {
+.btn-action:active { transform: scale(0.95); }
+.btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.action-icon { font-size: 2rem; margin-bottom: 8px; }
+.action-text { text-align: center; line-height: 1.2; }
+
+.btn-entrada { background: var(--color-success); }
+.btn-pausa { background: var(--color-warning); }
+
+/* Histórico */
+.history-list {
   list-style: none;
   padding: 0;
   margin: 0;
 }
-.historico li {
+.history-list li {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 12px 0;
   border-bottom: 1px solid #f1f5f9;
-  font-size: 1.1rem;
 }
-.hora {
-  font-weight: bold;
-  color: var(--color-primary, #2563eb);
+.history-list li:last-child { border-bottom: none; }
+
+.history-time {
+  font-weight: 800;
+  font-size: 1.2rem;
+  color: var(--color-text);
 }
+.history-motivo {
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+}
+.history-motivo.trabalho { background: var(--color-success-light); color: #065f46; }
+.history-motivo.pausa { background: var(--color-warning-light); color: #92400e; }
+
 .empty-state {
   text-align: center;
-  color: var(--color-muted, #64748b);
-  padding: 16px;
+  padding: 20px;
+  color: var(--color-muted);
 }
-
-.btn-ponto:disabled { opacity: 0.5; cursor: not-allowed; }
-
 </style>

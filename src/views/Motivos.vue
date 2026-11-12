@@ -49,12 +49,11 @@ async function salvarMotivo() {
     nome: form.value.nome.trim(),
     natureza: form.value.natureza,
     ordem: Number(form.value.ordem),
-    ativo: true // Todo novo motivo começa ativo
+    ativo: true
   };
 
   try {
     if (editandoId.value) {
-      // Preserva o status 'ativo' caso estivesse editando
       const original = motivos.value.find(m => m.id === editandoId.value);
       motivoDados.ativo = original.ativo;
       await putItem('motivos', JSON.parse(JSON.stringify(motivoDados)));
@@ -88,58 +87,84 @@ async function alternarStatus(motivo) {
 </script>
 
 <template>
-  <div class="container">
-    <header class="header">
-      <router-link to="/configuracoes" class="btn-back">← Voltar</router-link>
-      <h1>Motivos de Ponto</h1>
-      <button @click="abrirNovo" class="btn-primary" v-if="!mostrarFormulario">+ Novo</button>
+  <div class="page-container">
+    
+    <!-- Cabeçalho -->
+    <header class="page-header">
+      <div class="header-left">
+        <router-link to="/configuracoes" class="btn-back" title="Voltar para Configurações">
+          ←
+        </router-link>
+        <div>
+          <h1 class="page-title" style="text-align: left; margin-bottom: 0; font-size: 1.3rem;">Motivos</h1>
+          <p class="page-subtitle" style="text-align: left; margin-bottom: 0;">Botões da tela de ponto</p>
+        </div>
+      </div>
+      <button @click="abrirNovo" class="btn btn-primary" v-if="!mostrarFormulario">
+        + Novo
+      </button>
     </header>
 
     <!-- Formulário -->
     <div v-if="mostrarFormulario" class="card form-card">
-      <h2>{{ editandoId ? 'Editar Motivo' : 'Novo Motivo' }}</h2>
+      <div class="form-header">
+        <h2>{{ editandoId ? 'Editar Motivo' : 'Novo Motivo' }}</h2>
+        <button @click="mostrarFormulario = false" class="btn-close">✕</button>
+      </div>
       
       <div class="form-group">
-        <label>Nome do Botão *</label>
-        <input v-model="form.nome" type="text" placeholder="Ex: Pausa Café" />
+        <label class="form-label">Nome do Botão *</label>
+        <input v-model="form.nome" type="text" class="form-input" placeholder="Ex: Pausa Café" />
       </div>
 
-      <div class="form-group">
-        <label>Natureza *</label>
-        <select v-model="form.natureza">
-          <option value="trabalho">Trabalho (Inicia período)</option>
-          <option value="pausa">Pausa (Encerra período)</option>
-        </select>
-        <small class="hint">A natureza diz ao sistema se este botão faz o tempo começar a contar ou parar.</small>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Natureza *</label>
+          <select v-model="form.natureza" class="form-select">
+            <option value="trabalho">⏱️ Trabalho (Inicia)</option>
+            <option value="pausa">☕ Pausa (Encerra)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Ordem de Exibição</label>
+          <input v-model="form.ordem" type="number" min="1" class="form-input" />
+        </div>
+      </div>
+      
+      <div class="hint-box">
+        💡 A ordem define a posição do botão na tela de ponto. Números menores aparecem primeiro.
       </div>
 
-      <div class="form-group">
-        <label>Ordem de exibição</label>
-        <input v-model="form.ordem" type="number" min="1" />
-        <small class="hint">Números menores aparecem primeiro na tela de ponto.</small>
-      </div>
-
-      <div class="actions">
-        <button @click="mostrarFormulario = false" class="btn-cancel">Cancelar</button>
-        <button @click="salvarMotivo" class="btn-success">Salvar</button>
+      <div class="form-actions">
+        <button @click="mostrarFormulario = false" class="btn btn-outline">Cancelar</button>
+        <button @click="salvarMotivo" class="btn btn-primary">Salvar Motivo</button>
       </div>
     </div>
 
     <!-- Lista -->
     <div class="lista" v-if="!mostrarFormulario">
-      <div v-for="motivo in motivos" :key="motivo.id" class="card item-motivo" :class="{ 'inativo': !motivo.ativo }">
-        <div class="info">
-          <h3>
+      <div v-if="motivos.length === 0" class="empty-state">
+        Nenhum motivo cadastrado. Clique em "+ Novo" para criar.
+      </div>
+
+      <div 
+        v-for="motivo in motivos" 
+        :key="motivo.id" 
+        class="motivo-card" 
+        :class="{ 'inativo': !motivo.ativo }"
+      >
+        <div class="motivo-info">
+          <div class="motivo-title-row">
             <span class="ordem-badge">{{ motivo.ordem }}</span>
-            {{ motivo.nome }}
-          </h3>
-          <span class="natureza" :class="motivo.natureza">
+            <h3>{{ motivo.nome }}</h3>
+          </div>
+          <span class="badge-natureza" :class="motivo.natureza">
             {{ motivo.natureza === 'trabalho' ? '⏱️ Trabalho' : '☕ Pausa' }}
           </span>
         </div>
         
-        <div class="actions-colab">
-          <span class="badge" :class="motivo.ativo ? 'ativo' : 'inativo'">{{ motivo.ativo ? 'ativo' : 'inativo' }}</span>
+        <div class="motivo-actions">
           <button @click="abrirEdicao(motivo)" class="btn-icon" title="Editar">✏️</button>
           <button @click="alternarStatus(motivo)" class="btn-icon" :title="motivo.ativo ? 'Desativar' : 'Reativar'">
             {{ motivo.ativo ? '🚫' : '✅' }}
@@ -151,30 +176,172 @@ async function alternarStatus(motivo) {
 </template>
 
 <style scoped>
-.container { padding: 16px; max-width: 800px; margin: 0 auto; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.header h1 { font-size: 1.2rem; margin: 0; flex: 1; text-align: center; }
-.btn-back { text-decoration: none; color: var(--color-primary, #2563eb); font-weight: bold; font-size: 0.9rem; }
-.btn-primary { background: var(--color-primary, #2563eb); color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem; }
-.card { background: var(--color-surface, #fff); padding: 16px; border-radius: var(--radius-md, 10px); box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); margin-bottom: 16px; }
-.form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 0.9rem; font-weight: bold; margin-bottom: 4px; }
-.form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
-.hint { display: block; font-size: 0.8rem; color: var(--color-muted, #64748b); margin-top: 4px; }
-.actions { display: flex; gap: 10px; margin-top: 16px; }
-.btn-cancel { flex: 1; padding: 12px; border: 1px solid #ccc; background: #fff; border-radius: 8px; font-weight: bold; cursor: pointer; }
-.btn-success { flex: 1; background: var(--color-success, #16a34a); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 1.1rem; cursor: pointer; }
-.item-motivo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; transition: opacity 0.2s; }
-.item-motivo.inativo { opacity: 0.5; background: #f8fafc; }
-.info h3 { margin: 0 0 4px 0; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
-.ordem-badge { background: #e2e8f0; color: #475569; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; }
-.natureza { font-size: 0.8rem; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
-.natureza.trabalho { background: #dcfce7; color: #166534; }
-.natureza.pausa { background: #fef3c7; color: #92400e; }
-.actions-colab { display: flex; align-items: center; gap: 8px; }
-.badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; }
-.badge.ativo { background: #dcfce7; color: #166534; }
-.badge.inativo { background: #fee2e2; color: #991b1b; }
-.btn-icon { background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 4px; border-radius: 4px; }
+/* Cabeçalho */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.btn-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: white;
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: 1.2rem;
+  font-weight: bold;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid #e2e8f0;
+  transition: background 0.2s;
+}
+.btn-back:hover { background: #f1f5f9; }
+
+/* Formulário */
+.form-card {
+  border-top: 4px solid var(--color-primary);
+}
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.form-header h2 { margin: 0; font-size: 1.3rem; color: var(--color-text); }
+.btn-close {
+  background: #f1f5f9;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--color-muted);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 500px) {
+  .form-row { grid-template-columns: 1fr; }
+}
+
+.hint-box {
+  background: var(--color-primary-light);
+  color: var(--color-primary-hover);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  margin-top: 8px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+.form-actions .btn { flex: 1; }
+
+/* Lista de Motivos */
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.motivo-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid #f1f5f9;
+  transition: transform 0.2s;
+}
+.motivo-card:active { transform: scale(0.99); }
+
+.motivo-card.inativo {
+  background: #f8fafc;
+  opacity: 0.6;
+}
+
+.motivo-info { flex: 1; }
+.motivo-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.motivo-title-row h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.ordem-badge {
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 800;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.badge-natureza {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.badge-natureza.trabalho { background: var(--color-success-light); color: #065f46; }
+.badge-natureza.pausa { background: var(--color-warning-light); color: #92400e; }
+
+.motivo-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-icon {
+  background: #f1f5f9;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
 .btn-icon:hover { background: #e2e8f0; }
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  background: white;
+  border-radius: var(--radius-lg);
+  color: var(--color-muted);
+}
 </style>

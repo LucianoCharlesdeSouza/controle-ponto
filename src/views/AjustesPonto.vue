@@ -15,7 +15,12 @@ const marcacaoAtual = ref(null);
 const justificativa = ref('');
 
 onMounted(async () => {
-  colaboradores.value = await getAllItems('colaboradores');
+  const todosColab = await getAllItems('colaboradores');
+  colaboradores.value = todosColab.sort((a, b) => {
+    if (a.situacao !== b.situacao) return a.situacao === 'ativo' ? -1 : 1;
+    return a.nome.localeCompare(b.nome);
+  });
+  
   motivos.value = (await getAllItems('motivos')).sort((a, b) => a.ordem - b.ordem);
   marcacoes.value = await getAllItems('marcacoes');
   
@@ -35,7 +40,6 @@ const diasTrabalhados = computed(() => {
     dias[dia].push(m);
   });
 
-  // Retorna um array de objetos { data, marcacoesDoDia }
   return Object.keys(dias)
     .sort((a, b) => new Date(b) - new Date(a)) // Mais recentes primeiro
     .map(dia => ({
@@ -44,15 +48,59 @@ const diasTrabalhados = computed(() => {
     }));
 });
 
+function formatarDataExibicao(dataStr) {
+  return dataStr.split('-').reverse().join('/');
+}
+
+function formatarHora(isoStr) {
+  return new Date(isoStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
 function abrirEdicao(marcacao) {
-  // Copia os dados para não alterar na tela antes de salvar
+  if (marcacao.anulada) return; // Bloqueia a edição se estiver anulada
+  
   marcacaoAtual.value = JSON.parse(JSON.stringify(marcacao));
   justificativa.value = '';
   editando.value = true;
 }
 
+// Adicione esta nova função para reativar:
+async function reativarMarcacao(marcacao) {
+  if (!confirm(`Deseja reativar a marcação das ${formatarHora(marcacao.dataHoraLocal)}?`)) {
+    return;
+  }
+
+  const justificativaReativacao = prompt('Por favor, informe o motivo da reativação (obrigatório):');
+  if (!justificativaReativacao || !justificativaReativacao.trim()) {
+    alert('A reativação foi cancelada. A justificativa é obrigatória.');
+    return;
+  }
+
+  try {
+    // Registra na auditoria
+    await addItem('ajustes', {
+      id: uuidv4(),
+      marcacaoId: marcacao.id,
+      valorOriginal: JSON.parse(JSON.stringify(marcacao)),
+      valorCorrigido: { ...marcacao, anulada: false },
+      justificativa: justificativaReativacao,
+      tipo: 'reativacao',
+      criadoEm: new Date().toISOString()
+    });
+
+    // Atualiza no banco
+    const marcacaoReativada = { ...marcacao, anulada: false };
+    await putItem('marcacoes', JSON.parse(JSON.stringify(marcacaoReativada)));
+
+    marcacoes.value = await getAllItems('marcacoes');
+    alert('Marcação reativada com sucesso!');
+  } catch (e) {
+    console.error(e);
+    alert('Erro ao reativar marcação: ' + e.message);
+  }
+}
+
 function abrirNovaMarcacao(dia) {
-  // Cria uma marcação em branco para o dia selecionado (ex: 12:00)
   marcacaoAtual.value = {
     id: uuidv4(),
     colaboradorId: colaboradorSelecionadoId.value,
@@ -67,7 +115,6 @@ function abrirNovaMarcacao(dia) {
   editando.value = true;
 }
 
-// Atualiza a natureza quando o motivo muda
 function atualizarNatureza() {
   const motivo = motivos.value.find(m => m.id === marcacaoAtual.value.motivoId);
   if (motivo) {
@@ -82,24 +129,19 @@ async function salvarAjuste() {
   }
 
   try {
-    // Função auxiliar para remover a reatividade do Vue antes de salvar no IndexedDB
     const cloneProfundo = (obj) => JSON.parse(JSON.stringify(obj));
 
     if (marcacaoAtual.value.isNova) {
-      // Nova marcação
       const nova = cloneProfundo(marcacaoAtual.value);
-      delete nova.isNova; // Remove a flag temporária
+      delete nova.isNova;
       await addItem('marcacoes', nova);
     } else {
-      // Edição de marcação existente
       const original = marcacoes.value.find(m => m.id === marcacaoAtual.value.id);
       
-      // Prepara os objetos puros para salvar
       const originalPuro = cloneProfundo(original);
       const corrigidoPuro = cloneProfundo(marcacaoAtual.value);
       delete corrigidoPuro.isNova;
 
-      // Salva o histórico de auditoria (AQUI ESTAVA O ERRO)
       const novoAjuste = {
         id: uuidv4(),
         marcacaoId: originalPuro.id,
@@ -110,12 +152,9 @@ async function salvarAjuste() {
       };
 
       await addItem('ajustes', cloneProfundo(novoAjuste));
-
-      // Atualiza a marcação real
       await putItem('marcacoes', corrigidoPuro);
     }
 
-    // Recarrega os dados
     marcacoes.value = await getAllItems('marcacoes');
     editando.value = false;
     alert('Ajuste salvo com sucesso!');
@@ -126,29 +165,27 @@ async function salvarAjuste() {
 }
 
 async function anularMarcacao(marcacao) {
-  if (!confirm(`Deseja realmente excluir a marcação das ${new Date(marcacao.dataHoraLocal).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}?`)) {
+  if (!confirm(`Deseja realmente excluir a marcação das ${formatarHora(marcacao.dataHoraLocal)}?`)) {
     return;
   }
 
-  const justificativa = prompt('Por favor, informe o motivo da exclusão (obrigatório):');
-  if (!justificativa || !justificativa.trim()) {
+  const justificativaAnulacao = prompt('Por favor, informe o motivo da exclusão (obrigatório):');
+  if (!justificativaAnulacao || !justificativaAnulacao.trim()) {
     alert('A exclusão foi cancelada. A justificativa é obrigatória.');
     return;
   }
 
   try {
-    // Cria o registro de auditoria da exclusão
     await addItem('ajustes', {
       id: uuidv4(),
       marcacaoId: marcacao.id,
       valorOriginal: JSON.parse(JSON.stringify(marcacao)),
       valorCorrigido: null,
-      justificativa: justificativa,
+      justificativa: justificativaAnulacao,
       tipo: 'exclusao',
       criadoEm: new Date().toISOString()
     });
 
-    // Marca como anulada no banco
     const marcacaoAnulada = { ...marcacao, anulada: true };
     await putItem('marcacoes', JSON.parse(JSON.stringify(marcacaoAnulada)));
 
@@ -162,24 +199,34 @@ async function anularMarcacao(marcacao) {
 </script>
 
 <template>
-  <div class="container">
-    <header class="header">
-      <h1>Tratamento de Ponto</h1>
+  <div class="page-container">
+    <header>
+      <h1 class="page-title">Tratamento de Ponto</h1>
+      <p class="page-subtitle">Corrija erros, adicione marcações ou audite</p>
     </header>
 
-    <div class="card filtros">
-      <label>Colaborador</label>
-      <select v-model="colaboradorSelecionadoId" @change="editando = false">
-        <option v-for="c in colaboradores" :key="c.id" :value="c.id">{{ c.nome }}</option>
+    <!-- Filtro de Colaborador -->
+    <div class="card filter-card no-print" v-if="!editando">
+      <label class="form-label">Selecione o colaborador</label>
+      <select v-model="colaboradorSelecionadoId" class="form-select">
+        <option v-for="c in colaboradores" :key="c.id" :value="c.id">
+          {{ c.nome }} {{ c.situacao === 'inativo' ? '(Inativo)' : '' }}
+        </option>
       </select>
     </div>
 
     <!-- Lista de Dias -->
     <div v-if="!editando" class="lista-dias">
+      <div v-if="diasTrabalhados.length === 0" class="empty-state">
+        Nenhuma marcação encontrada para este colaborador.
+      </div>
+
       <div v-for="dia in diasTrabalhados" :key="dia.data" class="card dia-card">
         <div class="dia-header">
-          <h3>{{ dia.data.split('-').reverse().join('/') }}</h3>
-          <button @click="abrirNovaMarcacao(dia.data)" class="btn-small">+ Adicionar</button>
+          <h3>{{ formatarDataExibicao(dia.data) }}</h3>
+          <button @click="abrirNovaMarcacao(dia.data)" class="btn btn-outline" style="padding: 6px 12px; font-size: 0.8rem;">
+            + Adicionar
+          </button>
         </div>
         
         <div class="marcacoes-list">
@@ -189,75 +236,240 @@ async function anularMarcacao(marcacao) {
             class="marcacao-item" 
             :class="{ 'anulada': marc.anulada }"
           >
-            <div @click="abrirEdicao(marc)" class="marcacao-click-area" style="flex: 1; display: flex; cursor: pointer;">
-              <span class="hora">{{ new Date(marc.dataHoraLocal).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}</span>
-              <span class="motivo">{{ motivos.find(m => m.id === marc.motivoId)?.nome }}</span>
-              <span class="edit-icon">✏️</span>
+            <!-- Área de clique para editar (desabilitada se anulada) -->
+            <div 
+              @click="abrirEdicao(marc)" 
+              class="marcacao-content"
+              :style="{ cursor: marc.anulada ? 'not-allowed' : 'pointer' }"
+            >
+              <span class="hora">{{ formatarHora(marc.dataHoraLocal) }}</span>
+              <span class="motivo">{{ motivos.find(m => m.id === marc.motivoId)?.nome || '?' }}</span>
+              <span class="badge-tipo" :class="marc.natureza">{{ marc.natureza === 'trabalho' ? 'Trabalho' : 'Pausa' }}</span>
             </div>
-            <button @click.stop="anularMarcacao(marc)" class="btn-trash" title="Excluir (Anular) Marcação">🗑️</button>
+            
+            <!-- Botão de Ação: Lixeira (Anular) ou Check (Reativar) -->
+            <button 
+              v-if="!marc.anulada"
+              @click.stop="anularMarcacao(marc)" 
+              class="btn-action-icon btn-trash" 
+              title="Excluir (Anular) Marcação"
+            >
+              🗑️
+            </button>
+            <button 
+              v-else
+              @click.stop="reativarMarcacao(marc)" 
+              class="btn-action-icon btn-reativar" 
+              title="Reativar Marcação"
+            >
+              ♻️
+            </button>
           </div>
         </div>
       </div>
-      
-      <p v-if="diasTrabalhados.length === 0" class="empty">Nenhuma marcação encontrada.</p>
     </div>
 
-    <!-- Formulário de Edição -->
-    <div v-if="editando" class="card form-edit">
-      <h2>{{ marcacaoAtual.isNova ? 'Adicionar Marcação' : 'Editar Marcação' }}</h2>
+    <!-- Formulário de Edição/Inclusão (Focado) -->
+    <div v-if="editando" class="card form-card">
+      <div class="form-header">
+        <h2>{{ marcacaoAtual.isNova ? 'Adicionar Marcação' : 'Editar Marcação' }}</h2>
+        <button @click="editando = false" class="btn-close">✕</button>
+      </div>
       
       <div class="form-group">
-        <label>Data e Hora</label>
-        <input type="datetime-local" v-model="marcacaoAtual.dataHoraLocal" step="1" />
+        <label class="form-label">Data e Hora</label>
+        <input type="datetime-local" v-model="marcacaoAtual.dataHoraLocal" step="1" class="form-input" />
       </div>
 
       <div class="form-group">
-        <label>Motivo</label>
-        <select v-model="marcacaoAtual.motivoId" @change="atualizarNatureza">
-          <option v-for="m in motivos" :key="m.id" :value="m.id">{{ m.nome }} ({{ m.natureza }})</option>
+        <label class="form-label">Motivo</label>
+        <select v-model="marcacaoAtual.motivoId" @change="atualizarNatureza" class="form-select">
+          <option v-for="m in motivos" :key="m.id" :value="m.id">
+            {{ m.nome }} ({{ m.natureza }})
+          </option>
         </select>
       </div>
 
       <div class="form-group">
-        <label>Justificativa (Obrigatória)</label>
-        <textarea v-model="justificativa" rows="3" placeholder="Ex: Colaborador esqueceu de bater o ponto..."></textarea>
+        <label class="form-label">Justificativa (Obrigatória)</label>
+        <textarea v-model="justificativa" rows="3" class="form-input" placeholder="Ex: Colaborador esqueceu de bater o ponto..."></textarea>
+        <small class="hint">Este texto ficará salvo no histórico de auditoria.</small>
       </div>
 
-      <div class="actions">
-        <button @click="editando = false" class="btn-cancel">Cancelar</button>
-        <button @click="salvarAjuste" class="btn-save">Salvar Ajuste</button>
+      <div class="form-actions">
+        <button @click="editando = false" class="btn btn-outline">Cancelar</button>
+        <button @click="salvarAjuste" class="btn btn-primary">Salvar</button>
       </div>
     </div>
+
   </div>
 </template>
 
 <style scoped>
-.container { padding: 16px; max-width: 800px; margin: 0 auto; }
-.header h1 { font-size: 1.5rem; margin-bottom: 20px; text-align: center; }
-.card { background: var(--color-surface, #fff); padding: 16px; border-radius: var(--radius-md, 10px); box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); margin-bottom: 16px; }
-.filtros label { display: block; font-size: 0.9rem; font-weight: bold; margin-bottom: 4px; }
-.filtros select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
-.dia-card { padding: 12px; }
-.dia-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 8px; }
-.dia-header h3 { margin: 0; font-size: 1.1rem; }
-.btn-small { background: #e2e8f0; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; }
-.marcacao-item { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px dashed #f1f5f9; cursor: pointer; }
-.marcacao-item:hover { background: #f8fafc; }
-.hora { font-weight: bold; color: var(--color-primary, #2563eb); width: 60px; }
-.motivo { flex: 1; }
-.edit-icon { font-size: 1.2rem; opacity: 0.5; }
-.form-group { margin-bottom: 16px; }
-.form-group label { display: block; font-size: 0.9rem; font-weight: bold; margin-bottom: 4px; }
-.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; font-family: inherit; }
-.actions { display: flex; gap: 10px; }
-.btn-cancel { flex: 1; padding: 12px; border: 1px solid #ccc; background: #fff; border-radius: 8px; font-weight: bold; cursor: pointer; }
-.btn-save { flex: 1; padding: 12px; border: none; background: var(--color-primary, #2563eb); color: white; border-radius: 8px; font-weight: bold; cursor: pointer; }
-.empty { text-align: center; color: var(--color-muted, #64748b); }
+/* Filtro */
+.filter-card {
+  padding: 16px;
+  margin-bottom: 24px;
+  border-top: 4px solid var(--color-primary);
+}
 
-.marcacao-item { display: flex; align-items: center; border-bottom: 1px dashed #f1f5f9; }
+/* Lista de Dias */
+.lista-dias {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dia-card {
+  padding: 0; /* O padding será feito nos itens internos */
+  overflow: hidden;
+}
+
+.dia-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.dia-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--color-text);
+}
+
+.marcacoes-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.marcacao-item {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-right: 8px;
+  transition: background 0.2s;
+}
+.marcacao-item:last-child { border-bottom: none; }
 .marcacao-item:hover { background: #f8fafc; }
-.marcacao-item.anulada { opacity: 0.5; }
-.marcacao-item.anulada .hora, .marcacao-item.anulada .motivo { text-decoration: line-through; color: #999; }
-.btn-trash { background: none; border: none; cursor: pointer; font-size: 1.1rem; padding: 8px; opacity: 0.5; }
-.btn-trash:hover { opacity: 1; background: #fee2e2; border-radius: 4px; }
+
+.marcacao-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  cursor: pointer;
+  gap: 12px;
+}
+
+.hora {
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--color-text);
+  min-width: 50px;
+}
+
+.motivo {
+  flex: 1;
+  font-size: 0.95rem;
+  color: var(--color-muted);
+  font-weight: 500;
+}
+
+.badge-tipo {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.badge-tipo.trabalho { background: var(--color-success-light); color: #065f46; }
+.badge-tipo.pausa { background: var(--color-warning-light); color: #92400e; }
+
+/* Estilos para item anulado */
+.marcacao-item.anulada { opacity: 0.6; background: #fff1f2; }
+.marcacao-item.anulada .hora, 
+.marcacao-item.anulada .motivo { text-decoration: line-through; color: #9f1239; }
+.marcacao-item.anulada .badge-tipo { display: none; }
+/* Garantir que a área de conteúdo não mude de cor no hover se estiver anulada */
+.marcacao-item.anulada .marcacao-content:hover {
+  background: transparent;
+}
+
+.btn-action-icon {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 8px;
+  border-radius: 50%;
+  transition: all 0.2s;
+  opacity: 0.5;
+}
+
+.btn-trash {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 8px;
+  opacity: 0.4;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.btn-trash:hover { 
+  opacity: 1; 
+  background: #fee2e2; 
+}
+
+.btn-reativar {
+  opacity: 0.8;
+}
+.btn-reativar:hover { 
+  opacity: 1; 
+  background: #dcfce7; 
+}
+
+/* Formulário de Edição */
+.form-card {
+  border-top: 4px solid var(--color-primary);
+}
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.form-header h2 { margin: 0; font-size: 1.3rem; color: var(--color-text); }
+.btn-close {
+  background: #f1f5f9;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--color-muted);
+}
+
+.hint { display: block; font-size: 0.8rem; color: var(--color-muted); margin-top: 6px; }
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+.form-actions .btn { flex: 1; }
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  background: white;
+  border-radius: var(--radius-lg);
+  color: var(--color-muted);
+}
 </style>

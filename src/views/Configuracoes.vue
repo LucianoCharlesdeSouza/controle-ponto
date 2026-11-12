@@ -61,88 +61,142 @@ async function importarBackup(event) {
 
 function formatarData(isoStr) {
   if (!isoStr) return 'Nunca realizado';
-  return new Date(isoStr).toLocaleString('pt-BR');
+  return new Date(isoStr).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 </script>
 
 <template>
-  <div class="container">
-    <header class="header">
-      <h1>Configurações</h1>
+  <div class="page-container">
+    <header>
+      <h1 class="page-title">Configurações</h1>
+      <p class="page-subtitle">Gestão do sistema e dados</p>
     </header>
 
-    <div class="card menu-card">
-      <h2>Cadastros</h2>
+    <!-- Ações Rápidas -->
+    <div class="card action-card">
+      <h2 class="section-title">📋 Cadastros</h2>
       <router-link to="/motivos" class="menu-link">
-        <span>📋 Gerenciar Motivos de Ponto</span>
-        <span>→</span>
+        <div class="menu-icon">🏷️</div>
+        <div class="menu-text">
+          <strong>Gerenciar Motivos de Ponto</strong>
+          <span>Criar, editar ou desativar botões de marcação</span>
+        </div>
+        <div class="menu-arrow">→</div>
       </router-link>
     </div>
 
+    <!-- Backup -->
     <div class="card">
-      <h2>Backup dos Dados</h2>
-      <p class="desc">Os dados são salvos no seu dispositivo. Faça backups periódicos para não perder as informações.</p>
+      <h2 class="section-title">💾 Backup dos Dados</h2>
+      <p class="desc">Os dados ficam salvos apenas neste dispositivo. Faça backups periódicos para não perder nada se o celular for formatado ou o navegador limpo.</p>
       
       <div class="status-box">
-        <div>
-          <strong>Último backup:</strong> 
-          <span :class="{ 'alerta-texto': !dataUltimoBackup }">{{ formatarData(dataUltimoBackup) }}</span>
+        <div class="status-item">
+          <span class="status-label">Último backup:</span>
+          <span class="status-value" :class="{ 'alerta': !dataUltimoBackup }">{{ formatarData(dataUltimoBackup) }}</span>
         </div>
-        <div v-if="espacoUsado">
-          <strong>Armazenamento usado:</strong> {{ espacoUsado }}
+        <div class="status-item" v-if="espacoUsado">
+          <span class="status-label">Armazenamento usado:</span>
+          <span class="status-value">{{ espacoUsado }}</span>
         </div>
       </div>
 
-      <button @click="fazerBackupCompartilhar" class="btn-primary">
-        📲 Compartilhar / Enviar Backup
-      </button>
-      
-      <button @click="fazerBackupDownload" class="btn-primary btn-outline">
-        📥 Baixar Backup (.ptbackup)
-      </button>
+      <div class="backup-actions">
+        <button @click="fazerBackupCompartilhar" class="btn btn-primary btn-block">
+          📲 Compartilhar / Enviar Backup
+        </button>
+        
+        <button @click="fazerBackupDownload" class="btn btn-outline btn-block">
+          📥 Baixar Backup (.ptbackup)
+        </button>
+      </div>
 
-      <div class="import-area">
-        <label class="btn-secondary">
-          📤 Restaurar Backup
-          <input type="file" accept=".ptbackup,.json" @change="importarBackup" style="display: none;" />
+      <div class="divider"></div>
+
+      <div class="restore-area">
+        <h3 class="restore-title">Restaurar Dados</h3>
+        <p class="desc">Substitua os dados atuais por um backup salvo.</p>
+        
+        <label class="btn btn-secondary btn-block" :class="{ 'disabled': importando }">
+          {{ importando ? 'Restaurando...' : '📤 Selecionar Arquivo de Backup' }}
+          <input type="file" accept=".ptbackup,.json" @change="importarBackup" style="display: none;" :disabled="importando" />
         </label>
-        <span v-if="importando" class="loading">Restaurando...</span>
       </div>
     </div>
 
-    <div class="card aviso">
-      <h3>⚠️ Importante</h3>
-      <ul>
-        <li>Como o aplicativo funciona 100% offline, os dados ficam salvos no cache do navegador.</li>
-        <li>Nunca limpe os dados do navegador sem antes fazer um backup.</li>
-        <li>Se trocar de celular ou computador, use o botão "Restaurar Backup" no novo aparelho.</li>
+    <!-- Aviso -->
+    <div class="card aviso-card">
+      <div class="aviso-header">
+        <span class="aviso-icon">⚠️</span>
+        <h3>Atenção</h3>
+      </div>
+      <ul class="aviso-list">
+        <li>O aplicativo funciona <strong>100% offline</strong>. Os dados ficam no cache do navegador.</li>
+        <li><strong>Nunca limpe os dados do navegador</strong> sem antes fazer um backup.</li>
+        <li>Ao trocar de celular, use o botão "Restaurar Backup" no novo aparelho.</li>
       </ul>
     </div>
   </div>
 </template>
 
 <style scoped>
-.container { padding: 16px; max-width: 800px; margin: 0 auto; }
-.header h1 { font-size: 1.5rem; margin-bottom: 20px; text-align: center; }
-.card { background: var(--color-surface, #fff); padding: 20px; border-radius: var(--radius-md, 10px); box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); margin-bottom: 16px; }
-.card h2 { margin-top: 0; font-size: 1.2rem; }
-.desc { color: var(--color-muted, #64748b); font-size: 0.9rem; margin-bottom: 16px; }
-.status-box { background: #f8fafc; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; display: flex; flex-direction: column; gap: 8px; border: 1px solid #e2e8f0; }
-.alerta-texto { color: var(--color-danger, #dc2626); font-weight: bold; }
-.btn-primary { background: var(--color-primary, #2563eb); color: white; border: none; padding: 14px; width: 100%; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; margin-bottom: 12px; display: flex; justify-content: center; align-items: center; gap: 8px; }
-.btn-primary:hover { background: var(--color-primary-hover, #1d4ed8); }
-.btn-outline { background: transparent; color: var(--color-primary, #2563eb); border: 2px solid var(--color-primary, #2563eb); }
-.btn-outline:hover { background: #eff6ff; }
-.btn-secondary { display: block; text-align: center; background: #e2e8f0; color: #1e293b; padding: 14px; border-radius: 8px; font-weight: bold; cursor: pointer; text-decoration: none; font-size: 1rem; }
+/* Menu Link */
+.action-card { padding: 16px; }
+.menu-link {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-decoration: none;
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s;
+}
+.menu-link:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.menu-icon { font-size: 1.8rem; }
+.menu-text { flex: 1; display: flex; flex-direction: column; }
+.menu-text strong { color: var(--color-text); font-size: 1rem; }
+.menu-text span { color: var(--color-muted); font-size: 0.8rem; margin-top: 2px; }
+.menu-arrow { color: var(--color-primary); font-size: 1.2rem; font-weight: bold; }
+
+/* Status Box */
+.status-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.status-item { display: flex; justify-content: space-between; align-items: center; }
+.status-label { font-size: 0.85rem; color: var(--color-muted); font-weight: 600; }
+.status-value { font-size: 0.9rem; font-weight: 800; color: var(--color-text); }
+.status-value.alerta { color: var(--color-danger); }
+
+/* Botões de Ação */
+.backup-actions { display: flex; flex-direction: column; gap: 12px; }
+.btn-block { width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px; font-size: 1rem; }
+.btn-secondary { background: #e2e8f0; color: #1e293b; cursor: pointer; }
 .btn-secondary:hover { background: #cbd5e1; }
-.import-area { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.loading { color: var(--color-primary, #2563eb); font-weight: bold; text-align: center; }
-.aviso { border-left: 4px solid var(--color-warning, #d97706); }
-.aviso h3 { margin-top: 0; color: var(--color-warning, #d97706); font-size: 1.1rem; }
-.aviso ul { padding-left: 20px; margin-bottom: 0; font-size: 0.9rem; color: var(--color-muted, #64748b); line-height: 1.5; }
+.btn-secondary.disabled { opacity: 0.6; cursor: not-allowed; }
 
-.menu-card h2 { margin-top: 0; font-size: 1.2rem; margin-bottom: 12px; }
-.menu-link { display: flex; justify-content: space-between; align-items: center; text-decoration: none; color: var(--color-text, #1e293b); background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; font-weight: bold; transition: background 0.2s; }
-.menu-link:hover { background: #e2e8f0; }
+.divider { height: 1px; background: #e2e8f0; margin: 24px 0; }
 
+/* Restaurar */
+.restore-area { text-align: center; }
+.restore-title { font-size: 1rem; font-weight: 700; color: var(--color-text); margin-bottom: 4px; }
+.restore-area .desc { margin-bottom: 12px; }
+
+/* Aviso */
+.aviso-card { border-left: 5px solid var(--color-warning); background: #fffbeb; }
+.aviso-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.aviso-icon { font-size: 1.2rem; }
+.aviso-header h3 { margin: 0; color: #92400e; font-size: 1.1rem; }
+.aviso-list { padding-left: 20px; margin: 0; font-size: 0.9rem; color: #78350f; line-height: 1.6; }
+.aviso-list strong { font-weight: 800; }
+
+.desc { color: var(--color-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 16px; }
 </style>

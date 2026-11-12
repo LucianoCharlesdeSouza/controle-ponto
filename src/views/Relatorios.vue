@@ -6,7 +6,6 @@ import { apurarDia } from '../domain/ApuracaoJornada.js';
 import { formatarCentavosParaReal } from '../domain/Money.js';
 import AssinaturaCanvas from '../components/AssinaturaCanvas.vue';
 
-
 const colaboradores = ref([]);
 const motivos = ref([]);
 const marcacoes = ref([]);
@@ -19,12 +18,11 @@ const mesSelecionado = ref(new Date().toISOString().slice(0, 7));
 const anoSelecionado = ref(new Date().getFullYear());
 
 const relatorioGerado = ref(null);
-const diaExpandido = ref(null); // Para o acordeão do espelho de ponto
+const diaExpandido = ref(null);
 const diaInconsistente = ref(null);
 
 const assinaturaColaborador = ref('');
 const assinaturaResponsavel = ref('');
-
 
 onMounted(async () => {
   colaboradores.value = (await getAllItems('colaboradores')).sort((a, b) => a.nome.localeCompare(b.nome));
@@ -38,21 +36,17 @@ onMounted(async () => {
   }
 });
 
-// Busca o valor/hora vigente na data
 function getValorHoraVigente(colabId, dataStr) {
   const valores = valoresHora.value
     .filter(v => v.colaboradorId === colabId)
     .sort((a, b) => new Date(b.vigenciaInicio).getTime() - new Date(a.vigenciaInicio).getTime());
     
-  // Pega apenas a parte da data (YYYY-MM-DD) para comparar
-  const dataAlvo = new Date(`${dataStr}T12:00:00`).getTime(); // Usa meio-dia para evitar problemas de fuso
+  const dataAlvo = new Date(`${dataStr}T12:00:00`).getTime();
   
   const valor = valores.find(v => {
-    // Pega a data de início (YYYY-MM-DD)
     const inicioStr = v.vigenciaInicio.split('T')[0];
     const inicio = new Date(`${inicioStr}T00:00:00`).getTime();
     
-    // Pega a data de fim (YYYY-MM-DD), se existir
     let fim = Infinity;
     if (v.vigenciaFim) {
       const fimStr = v.vigenciaFim.split('T')[0];
@@ -64,45 +58,10 @@ function getValorHoraVigente(colabId, dataStr) {
   
   return valor ? valor.valorCentavos : 0;
 }
-// function getValorHoraVigente(colabId, dataStr) {
-//   const valores = valoresHora.value
-//     .filter(v => v.colaboradorId === colabId)
-//     .sort((a, b) => new Date(b.vigenciaInicio).getTime() - new Date(a.vigenciaInicio).getTime());
-    
-//   // Converte a data do dia (ex: "2026-11-10") para o final do dia em milissegundos
-//   const dataAlvo = new Date(`${dataStr}T23:59:59`).getTime();
-  
-//   const valor = valores.find(v => {
-//     const inicio = new Date(v.vigenciaInicio).getTime();
-//     const fim = v.vigenciaFim ? new Date(v.vigenciaFim).getTime() : Infinity;
-    
-//     return dataAlvo >= inicio && dataAlvo <= fim;
-//   });
-  
-//   return valor ? valor.valorCentavos : 0;
-// }
-// function getValorHoraVigente(colabId, dataStr) {
-//   const valores = valoresHora.value
-//     .filter(v => v.colaboradorId === colabId)
-//     .sort((a, b) => new Date(b.vigenciaInicio) - new Date(a.vigenciaInicio));
-    
-//   const dataAlvo = new Date(`${dataStr}T23:59:59`).getTime();
-  
-//   const valor = valores.find(v => {
-//     const inicio = new Date(v.vigenciaInicio).getTime();
-//     const fim = v.vigenciaFim ? new Date(v.vigenciaFim).getTime() : Infinity;
-//     return dataAlvo >= inicio && dataAlvo <= fim;
-//   });
-  
-//   return valor ? valor.valorCentavos : 0;
-// }
 
-// Formata horário local
 function formatarHora(isoStr) {
   return new Date(isoStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
-
-// --- GERAÇÃO DE RELATÓRIOS ---
 
 function gerarRelatorio() {
   if (tipoRelatorio.value === 'mensal') gerarRelatorioMensal();
@@ -113,7 +72,6 @@ function gerarRelatorio() {
 function gerarRelatorioMensal() {
   if (!colaboradorSelecionadoId.value) return;
 
-    // Limpa assinaturas anteriores
   assinaturaColaborador.value = '';
   assinaturaResponsavel.value = '';
 
@@ -137,7 +95,6 @@ function gerarRelatorioMensal() {
   diasDoMes.forEach(dia => {
     const valorHora = getValorHoraVigente(colaboradorSelecionadoId.value, dia);
     
-    // Separa as marcações válidas das anuladas para o cálculo
     const marcsValidas = porDia[dia].filter(m => !m.anulada);
     const marcsAnuladas = porDia[dia].filter(m => m.anulada);
     
@@ -146,12 +103,15 @@ function gerarRelatorioMensal() {
     totalMinutos += resultado.minutosTrabalhados;
     totalCentavos += resultado.valorCentavos;
     
-    // Formata os horários para o espelho de ponto
     const horariosStr = marcsValidas
       .sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal))
       .map(m => {
-        const motivo = motivos.value.find(mot => mot.id === m.motivoId)?.nome || '?';
-        return { hora: formatarHora(m.dataHoraLocal), motivo, original: false };
+        const motivoObj = motivos.value.find(mot => mot.id === m.motivoId);
+        return { 
+          hora: formatarHora(m.dataHoraLocal), 
+          motivo: motivoObj?.nome || '?',
+          natureza: motivoObj?.natureza || 'trabalho'
+        };
       });
 
     diasApurados.push({
@@ -185,7 +145,7 @@ function gerarRelatorioAnual() {
     
     const porMes = {};
     marcacoesColab.forEach(m => {
-      const mes = m.dataHoraLocal.slice(0, 7); // YYYY-MM
+      const mes = m.dataHoraLocal.slice(0, 7);
       if (!porMes[mes]) porMes[mes] = [];
       porMes[mes].push(m);
     });
@@ -196,7 +156,6 @@ function gerarRelatorioAnual() {
 
     Object.keys(porMes).sort().forEach(mes => {
       const marcsValidas = porMes[mes].filter(m => !m.anulada);
-      // Pega o valor hora do dia 15 do mês como referência para o cálculo do mês inteiro
       const valorHora = getValorHoraVigente(colab.id, `${mes}-15`);
       
       let minMes = 0;
@@ -243,10 +202,9 @@ function gerarRelatorioAnual() {
 function gerarRelatorioAjustes() {
   const ajustesPeriodo = ajustes.value
     .filter(a => a.criadoEm.startsWith(mesSelecionado.value))
-    .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm)); // Mais recentes primeiro
+    .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm));
 
   const detalhados = ajustesPeriodo.map(a => {
-    // Tenta achar a marcação original para pegar o nome do colaborador e o motivo
     const marcacaoOriginal = a.valorOriginal;
     const colab = colaboradores.value.find(c => c.id === marcacaoOriginal?.colaboradorId);
     const motivo = motivos.value.find(m => m.id === marcacaoOriginal?.motivoId);
@@ -278,39 +236,44 @@ function toggleDia(data) {
 </script>
 
 <template>
-  <div class="container">
-    <header class="header no-print">
-      <h1>Relatórios</h1>
+  <div class="page-container">
+    <header class="no-print">
+      <h1 class="page-title">Relatórios</h1>
+      <p class="page-subtitle">Espelhos de ponto, auditoria e pagamentos</p>
     </header>
 
     <!-- Filtros -->
-    <div class="card filtros no-print">
-      <div class="tabs">
-        <button :class="{ active: tipoRelatorio === 'mensal' }" @click="tipoRelatorio = 'mensal'">Espelho Mensal</button>
+    <div class="card filter-card no-print">
+      <div class="tabs-container">
+        <button :class="{ active: tipoRelatorio === 'mensal' }" @click="tipoRelatorio = 'mensal'">Mensal</button>
         <button :class="{ active: tipoRelatorio === 'anual' }" @click="tipoRelatorio = 'anual'">Anual</button>
         <button :class="{ active: tipoRelatorio === 'ajustes' }" @click="tipoRelatorio = 'ajustes'">Ajustes</button>
       </div>
 
       <div v-if="tipoRelatorio !== 'anual'" class="form-group">
-        <label>Colaborador</label>
-        <select v-model="colaboradorSelecionadoId">
+        <label class="form-label">Colaborador</label>
+        <select v-model="colaboradorSelecionadoId" class="form-select">
           <option v-for="c in colaboradores" :key="c.id" :value="c.id">{{ c.nome }}</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label>{{ tipoRelatorio === 'anual' ? 'Ano' : 'Mês' }}</label>
-        <input v-if="tipoRelatorio !== 'anual'" type="month" v-model="mesSelecionado" />
-        <input v-else type="number" v-model="anoSelecionado" min="2020" max="2100" />
+        <label class="form-label">{{ tipoRelatorio === 'anual' ? 'Ano' : 'Mês de Referência' }}</label>
+        <input v-if="tipoRelatorio !== 'anual'" type="month" v-model="mesSelecionado" class="form-input" />
+        <input v-else type="number" v-model="anoSelecionado" min="2020" max="2100" class="form-input" />
       </div>
 
-      <button @click="gerarRelatorio" class="btn-primary">Gerar Relatório</button>
+      <button @click="gerarRelatorio" class="btn btn-primary btn-block">Gerar Relatório</button>
     </div>
 
     <!-- Resultado -->
     <div v-if="relatorioGerado" class="resultado">
-      <div class="no-print" style="text-align: right; margin-bottom: 10px;">
-        <button @click="imprimir" class="btn-secondary">🖨️ Imprimir / PDF</button>
+      
+      <!-- Barra de Ações -->
+      <div class="no-print action-bar">
+        <button @click="imprimir" class="btn btn-outline" style="padding: 8px 16px;">
+          🖨️ Imprimir / PDF
+        </button>
       </div>
 
       <!-- Cabeçalho Impressão -->
@@ -322,18 +285,20 @@ function toggleDia(data) {
 
       <!-- ABA MENSAL -->
       <div v-if="relatorioGerado.tipo === 'mensal'">
-        <div class="card resumo">
+        <!-- Card de Resumo -->
+        <div class="resumo-card">
           <div class="resumo-item">
-            <span>Total de Horas</span>
-            <strong>{{ relatorioGerado.totalHorasStr }}</strong>
+            <span class="label">Total de Horas</span>
+            <strong class="value">{{ relatorioGerado.totalHorasStr }}</strong>
           </div>
+          <div class="resumo-divider"></div>
           <div class="resumo-item">
-            <span>Total a Pagar</span>
-            <strong class="valor">{{ formatarCentavosParaReal(relatorioGerado.totalCentavos) }}</strong>
+            <span class="label">Total a Pagar</span>
+            <strong class="value money">{{ formatarCentavosParaReal(relatorioGerado.totalCentavos) }}</strong>
           </div>
         </div>
 
-        <div class="card">
+        <div class="card table-card">
           <table class="tabela no-print">
             <thead>
               <tr>
@@ -346,22 +311,22 @@ function toggleDia(data) {
             <tbody>
               <template v-for="dia in relatorioGerado.dias" :key="dia.data">
                 <tr @click="toggleDia(dia.data)" style="cursor: pointer;" :class="{ 'linha-ativa': diaExpandido === dia.data }">
-                  <td>
+                  <td class="font-bold">
                     {{ dia.data.split('-').reverse().join('/') }}
-                    <span v-if="dia.anuladas.length > 0" title="Possui marcações excluídas" style="color: #dc2626; font-size: 0.8rem;">*</span>
+                    <span v-if="dia.anuladas.length > 0" title="Possui marcações excluídas" class="asterisco">*</span>
                   </td>
                   <td>{{ Math.floor(dia.minutos / 60) }}h {{ String(dia.minutos % 60).padStart(2, '0') }}m</td>
                   <td>{{ formatarCentavosParaReal(dia.valorCentavos) }}</td>
-                  <td style="text-align: right; color: #64748b;">
+                  <td class="text-right">
                     <span v-if="dia.inconsistencias.length > 0" class="alerta" title="Inconsistências" @click.stop="diaInconsistente = dia">⚠️</span>
-                    {{ diaExpandido === dia.data ? '▲' : '▼' }}
+                    <span class="expand-icon">{{ diaExpandido === dia.data ? '▲' : '▼' }}</span>
                   </td>
                 </tr>
                 <tr v-if="diaExpandido === dia.data" class="detalhe-row">
                   <td colspan="4">
                     <div class="detalhe-pontos">
-                      <div v-for="(h, idx) in dia.horarios" :key="idx" class="ponto-badge" :class="motivos.find(m => m.nome === h.motivo)?.natureza">
-                        <strong>{{ h.hora }}</strong> - {{ h.motivo }}
+                      <div v-for="(h, idx) in dia.horarios" :key="idx" class="ponto-badge" :class="h.natureza">
+                        <strong>{{ h.hora }}</strong> {{ h.motivo }}
                       </div>
                       <div v-for="(a, idx) in dia.anuladas" :key="'anulada-'+idx" class="ponto-badge anulada">
                         <del>{{ formatarHora(a.dataHoraLocal) }}</del> (Anulado)
@@ -373,7 +338,7 @@ function toggleDia(data) {
             </tbody>
           </table>
 
-          <!-- TABELA DE IMPRESSÃO (Sempre Completa e Visível no Papel) -->
+          <!-- TABELA DE IMPRESSÃO -->
           <table class="tabela print-only">
             <thead>
               <tr>
@@ -403,18 +368,13 @@ function toggleDia(data) {
           </table>
         </div>
 
-        <!-- <div class="assinaturas">
-          <div class="linha-assinatura"><div class="traco"></div><span>Assinatura do Colaborador</span></div>
-          <div class="linha-assinatura"><div class="traco"></div><span>Assinatura do Responsável</span></div>
-        </div> -->
         <!-- Área de Assinaturas -->
-        <div class="assinaturas">
-          <!-- Área para desenhar (visível na tela) -->
+        <div class="assinaturas no-print">
           <AssinaturaCanvas v-model="assinaturaColaborador" label="Assinatura do Colaborador" />
           <AssinaturaCanvas v-model="assinaturaResponsavel" label="Assinatura do Responsável" />
         </div>
 
-        <!-- Área de impressão (exibe as imagens desenhadas) -->
+        <!-- Área de impressão (Assinaturas) -->
         <div class="assinaturas-impressao print-only">
           <div class="bloco-assinatura">
             <div class="imagem-assinatura">
@@ -432,28 +392,27 @@ function toggleDia(data) {
             <span>Assinatura do Responsável</span>
           </div>
         </div>
-
       </div>
 
       <!-- ABA ANUAL -->
       <div v-if="relatorioGerado.tipo === 'anual'">
-        <div class="card">
+        <div class="card table-card">
           <table class="tabela">
             <thead>
               <tr>
                 <th>Colaborador</th>
-                <th>Total de Horas</th>
-                <th>Total a Pagar (Ano)</th>
+                <th>Horas</th>
+                <th class="text-right">Total a Pagar</th>
                 <th class="no-print"></th>
               </tr>
             </thead>
             <tbody>
               <template v-for="colab in relatorioGerado.dadosConsolidados" :key="colab.id">
                 <tr @click="toggleDia(colab.id)" style="cursor: pointer;" :class="{ 'linha-ativa': diaExpandido === colab.id }">
-                  <td><strong>{{ colab.nome }}</strong></td>
+                  <td class="font-bold">{{ colab.nome }}</td>
                   <td>{{ colab.horasStr }}</td>
-                  <td class="valor-tabela">{{ formatarCentavosParaReal(colab.centavos) }}</td>
-                  <td class="no-print" style="text-align: right; color: #64748b;">
+                  <td class="text-right valor-tabela">{{ formatarCentavosParaReal(colab.centavos) }}</td>
+                  <td class="no-print text-right expand-icon">
                     {{ diaExpandido === colab.id ? '▲' : '▼' }}
                   </td>
                 </tr>
@@ -461,9 +420,9 @@ function toggleDia(data) {
                   <td colspan="4">
                     <div class="detalhe-meses">
                       <div v-for="m in colab.meses" :key="m.mes" class="mes-badge">
-                        <span>{{ m.mes.split('-').reverse().join('/') }}</span>
-                        <strong>{{ Math.floor(m.minutos / 60) }}h {{ String(m.minutos % 60).padStart(2, '0') }}m</strong>
-                        <span class="val">{{ formatarCentavosParaReal(m.centavos) }}</span>
+                        <span class="mes-label">{{ m.mes.split('-').reverse().join('/') }}</span>
+                        <strong class="mes-horas">{{ Math.floor(m.minutos / 60) }}h {{ String(m.minutos % 60).padStart(2, '0') }}m</strong>
+                        <span class="mes-val">{{ formatarCentavosParaReal(m.centavos) }}</span>
                       </div>
                     </div>
                   </td>
@@ -476,28 +435,32 @@ function toggleDia(data) {
 
       <!-- ABA AJUSTES -->
       <div v-if="relatorioGerado.tipo === 'ajustes'">
-        <div class="card">
-          <p v-if="relatorioGerado.ajustes.length === 0" class="empty-state">Nenhum ajuste registrado neste mês.</p>
+        <div class="card table-card">
+          <div v-if="relatorioGerado.ajustes.length === 0" class="empty-state">
+            Nenhum ajuste registrado neste mês.
+          </div>
           <table class="tabela" v-else>
             <thead>
               <tr>
-                <th>Data Ajuste</th>
+                <th>Data</th>
                 <th>Colaborador</th>
-                <th>Original</th>
-                <th>Corrigido</th>
+                <th>Alteração</th>
                 <th>Justificativa</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="aj in relatorioGerado.ajustes" :key="aj.id">
-                <td>{{ new Date(aj.criadoEm).toLocaleDateString('pt-BR') }}</td>
-                <td>{{ aj.nomeColab }}<br><small>{{ aj.dataMarcacao.split('-').reverse().join('/') }}</small></td>
-                <td><del>{{ aj.horaOriginal }}</del><br><small>{{ aj.nomeMotivo }}</small></td>
+                <td class="text-muted text-small">{{ new Date(aj.criadoEm).toLocaleDateString('pt-BR') }}</td>
+                <td class="font-bold">{{ aj.nomeColab }}<br><small class="text-muted">{{ aj.dataMarcacao.split('-').reverse().join('/') }}</small></td>
                 <td>
-                  <strong v-if="aj.horaCorrigida !== 'Excluído'">{{ aj.horaCorrigida }}</strong>
-                  <span v-else style="color: #dc2626; font-weight: bold;">Excluído</span>
+                  <div class="alteracao-box">
+                    <del class="text-muted text-small">{{ aj.horaOriginal }}</del>
+                    <span class="arrow">→</span>
+                    <strong v-if="aj.horaCorrigida !== 'Excluído'" class="text-success">{{ aj.horaCorrigida }}</strong>
+                    <span v-else class="text-danger font-bold text-small">Excluído</span>
+                  </div>
                 </td>
-                <td><small>{{ aj.justificativa }}</small></td>
+                <td class="text-small">{{ aj.justificativa }}</td>
               </tr>
             </tbody>
           </table>
@@ -509,11 +472,11 @@ function toggleDia(data) {
     <!-- Modal Inconsistências -->
     <div v-if="diaInconsistente" class="modal-overlay no-print" @click.self="diaInconsistente = null">
       <div class="modal-content">
-        <h3>Detalhes do Dia {{ diaInconsistente.data.split('-').reverse().join('/') }}</h3>
-        <ul>
+        <h3>Inconsistências em {{ diaInconsistente.data.split('-').reverse().join('/') }}</h3>
+        <ul class="modal-list">
           <li v-for="(erro, index) in diaInconsistente.inconsistencias" :key="index">{{ erro }}</li>
         </ul>
-        <button @click="diaInconsistente = null" class="btn-primary" style="margin-top: 16px;">Entendi</button>
+        <button @click="diaInconsistente = null" class="btn btn-primary btn-block" style="margin-top: 16px;">Entendi</button>
       </div>
     </div>
 
@@ -521,59 +484,157 @@ function toggleDia(data) {
 </template>
 
 <style scoped>
-.container { padding: 16px; max-width: 800px; margin: 0 auto; }
-.header h1 { font-size: 1.5rem; margin-bottom: 20px; text-align: center; }
-.card { background: var(--color-surface, #fff); padding: 16px; border-radius: var(--radius-md, 10px); box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); margin-bottom: 16px; }
-.tabs { display: flex; gap: 10px; margin-bottom: 16px; }
-.tabs button { flex: 1; padding: 10px; border: 1px solid #ccc; background: #f8fafc; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 0.85rem; }
-.tabs button.active { background: var(--color-primary, #2563eb); color: white; border-color: var(--color-primary, #2563eb); }
-.form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 0.9rem; font-weight: bold; margin-bottom: 4px; }
-.form-group select, .form-group input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
-.btn-primary { background: var(--color-primary, #2563eb); color: white; border: none; padding: 12px; width: 100%; border-radius: 8px; font-weight: bold; font-size: 1.1rem; cursor: pointer; }
-.btn-secondary { background: var(--color-text, #1e293b); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
-.resumo { display: flex; justify-content: space-between; background: var(--color-primary, #2563eb); color: white; }
-.resumo-item { display: flex; flex-direction: column; }
-.resumo-item span { font-size: 0.9rem; opacity: 0.9; }
-.resumo-item strong { font-size: 1.5rem; }
-.resumo-item .valor { color: #fcd34d; }
-.tabela { width: 100%; border-collapse: collapse; }
-.tabela th { text-align: left; padding: 8px; border-bottom: 2px solid #eee; color: var(--color-muted, #64748b); font-size: 0.85rem; }
-.tabela td { padding: 10px 8px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; vertical-align: top; }
-.linha-ativa { background: #f8fafc; }
-.detalhe-row { background: #f8fafc; border-bottom: 2px solid #e2e8f0; }
-
-.linha-ativa + .detalhe-row {
-  display: table-row;
+/* Filtros e Tabs */
+.filter-card {
+  border-top: 4px solid var(--color-primary);
+  margin-bottom: 24px;
 }
-.detalhe-row td { padding: 12px 8px; border-bottom: 2px solid #e2e8f0; }
-.alerta { color: var(--color-warning, #d97706); font-size: 1.2rem; }
-.valor-tabela { font-weight: bold; color: var(--color-success, #16a34a); }
-.empty-state { text-align: center; color: var(--color-muted, #64748b); padding: 20px; }
 
-/* Detalhes Ponto */
+.tabs-container {
+  display: flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+}
+.tabs-container button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tabs-container button.active {
+  background: white;
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Ações */
+.action-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+/* Resumo (Card Azul) */
+.resumo-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-primary);
+  color: white;
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  margin-bottom: 16px;
+}
+.resumo-item {
+  display: flex;
+  flex-direction: column;
+}
+.resumo-item .label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.resumo-item .value {
+  font-size: 1.8rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.resumo-item .money { color: #fcd34d; }
+.resumo-divider {
+  width: 1px;
+  height: 40px;
+  background: rgba(255,255,255,0.2);
+}
+
+/* Tabelas */
+.table-card {
+  padding: 0;
+  overflow: hidden;
+}
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+}
+.tabela th {
+  text-align: left;
+  padding: 14px 16px;
+  background: #f8fafc;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  border-bottom: 1px solid #e2e8f0;
+}
+.tabela td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.95rem;
+  color: var(--color-text);
+  vertical-align: middle;
+}
+.tabela tr:last-child td { border-bottom: none; }
+
+.linha-ativa { background: var(--color-primary-light); }
+.detalhe-row { background: #f8fafc; border-bottom: 2px solid #e2e8f0; }
+.detalhe-row td { padding: 16px; }
+
+/* Detalhes e Badges */
+.asterisco { color: var(--color-danger); font-weight: bold; }
+.alerta { color: var(--color-warning); font-size: 1.2rem; margin-right: 8px; cursor: pointer; }
+.expand-icon { color: #94a3b8; font-size: 0.8rem; }
+
 .detalhe-pontos { display: flex; flex-wrap: wrap; gap: 8px; }
-.ponto-badge { background: white; border: 1px solid #ccc; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; }
-.ponto-badge.trabalho { border-color: #16a34a; color: #166534; }
-.ponto-badge.pausa { border-color: #d97706; color: #92400e; }
-.ponto-badge.anulada { border-color: #dc2626; color: #991b1b; background: #fee2e2; opacity: 0.7; }
+.ponto-badge {
+  background: white;
+  border: 1px solid #cbd5e1;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+.ponto-badge.trabalho { border-left: 3px solid var(--color-success); }
+.ponto-badge.pausa { border-left: 3px solid var(--color-warning); }
+.ponto-badge.anulada { border-color: var(--color-danger); background: var(--color-danger-light); color: #991b1b; text-decoration: line-through; }
 
-/* Detalhes Mês */
-.detalhe-meses { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
-.mes-badge { background: white; border: 1px solid #ccc; padding: 8px; border-radius: 4px; display: flex; flex-direction: column; font-size: 0.85rem; }
-.mes-badge .val { color: var(--color-success, #16a34a); font-weight: bold; margin-top: 4px; }
+.detalhe-meses { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.mes-badge { background: white; border: 1px solid #e2e8f0; padding: 10px; border-radius: var(--radius-sm); display: flex; flex-direction: column; }
+.mes-label { font-size: 0.75rem; font-weight: 700; color: var(--color-muted); margin-bottom: 4px; }
+.mes-horas { font-size: 0.95rem; color: var(--color-text); }
+.mes-val { font-size: 0.85rem; font-weight: 700; color: var(--color-success); margin-top: 4px; }
 
-/* Assinaturas e Impressão */
-.print-header { display: none; margin-bottom: 20px; text-align: center; }
-.linha-assinatura { flex: 1; text-align: center; font-size: 0.9rem; color: #555; }
-.linha-assinatura .traco { border-top: 1px solid #333; margin-bottom: 5px; }
+/* Ajustes */
+.alteracao-box { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+.arrow { color: #94a3b8; }
+.text-success { color: var(--color-success); font-weight: 800; }
+.text-danger { color: var(--color-danger); }
+.text-muted { color: var(--color-muted); }
+.text-small { font-size: 0.8rem; }
+.font-bold { font-weight: 700; }
+.text-right { text-align: right; }
+.valor-tabela { font-weight: 800; color: var(--color-success); }
 
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 16px; }
-.modal-content { background: white; padding: 24px; border-radius: 10px; max-width: 400px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
-.modal-content h3 { margin-top: 0; color: var(--color-warning, #d97706); border-bottom: 1px solid #eee; padding-bottom: 8px; }
-.modal-content ul { padding-left: 20px; margin-bottom: 0; line-height: 1.5; }
+/* Modal */
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 16px; }
+.modal-content { background: white; padding: 24px; border-radius: var(--radius-lg); max-width: 400px; width: 100%; box-shadow: var(--shadow-lg); }
+.modal-content h3 { margin-top: 0; color: var(--color-warning); font-size: 1.2rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px; }
+.modal-list { padding-left: 20px; margin-bottom: 0; line-height: 1.6; color: var(--color-text); font-size: 0.9rem; }
 
-/* .assinaturas { display: none; margin-top: 50px; gap: 40px; } */
+.empty-state { text-align: center; color: var(--color-muted); padding: 40px; font-weight: 500; }
+
+/* Assinaturas */
 .assinaturas {
   display: flex;
   flex-direction: column;
@@ -581,47 +642,39 @@ function toggleDia(data) {
   margin-top: 24px;
   margin-bottom: 24px;
 }
+.assinaturas-impressao { display: none; }
+.print-only { display: none; }
+.print-header { display: none; }
 
-/* Ocultar a área de impressão na tela */
-.assinaturas-impressao {
-  display: none;
-}
-
-/* Ocultar tabela de impressão na tela */
-.print-only {
-  display: none;
-}
-
-/* --- REGRAS DE IMPRESSÃO --- */
+/* --- REGRAS DE IMPRESSÃO (MANTIDAS E AJUSTADAS) --- */
 @media print {
-  .no-print, .bottom-nav, .no-print * {
-    display: none !important;
-  }
+  .no-print, .bottom-nav, .no-print * { display: none !important; }
   
-  .print-only {
-    display: table !important;
-  }
+  .print-only { display: table !important; }
   
   .container { padding: 0; max-width: 100%; }
-  .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; margin-bottom: 0; }
-  .resumo { background: #eee !important; color: #000 !important; }
-  .resumo-item .valor { color: #000 !important; }
-  .print-header { display: block; }
-  /* .assinaturas { display: flex; } */
-  .page-content { padding-bottom: 0; }
+  .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; margin-bottom: 0; border-radius: 0; }
+  
+  /* Resumo em preto e branco na impressão */
+  .resumo-card { background: #eee !important; color: #000 !important; border: 1px solid #ccc; box-shadow: none; border-radius: 0; }
+  .resumo-item .money { color: #000 !important; }
+  .resumo-divider { background: #ccc; }
+
+  .print-header { display: block; margin-bottom: 20px; text-align: center; }
+  .print-header h2 { font-size: 1.3rem; margin-bottom: 8px; }
   
   .tabela { font-size: 0.85rem; }
-  .tabela th, .tabela td { padding: 6px 4px; border: 1px solid #ccc; }
+  .tabela th { background: #eee; border: 1px solid #ccc; padding: 6px 4px; }
+  .tabela td { padding: 6px 4px; border: 1px solid #ccc; }
   
   .detalhe-pontos { display: flex; flex-wrap: wrap; gap: 4px; }
   .ponto-badge { display: inline-block; border: 1px solid #ccc; padding: 2px 4px; margin: 2px; border-radius: 2px; font-size: 0.75rem; }
 
-
-  /* Exibe a área de impressão e esconde a de desenho */
+  /* Assinaturas Impressão */
   .assinaturas-impressao {
     display: flex !important;
-    flex-direction: row !important; /* Força ficar em linha */
-    flex-wrap: nowrap !important;  /* Impede que quebre para a linha de baixo */
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
     justify-content: space-between;
     gap: 30px;
     margin-top: 50px;
@@ -629,7 +682,7 @@ function toggleDia(data) {
   }
   
   .bloco-assinatura {
-    flex: 1; /* Cada um ocupa exatamente 50% do espaço */
+    flex: 1;
     width: 50%;
     text-align: center;
     display: flex;
@@ -638,7 +691,7 @@ function toggleDia(data) {
   }
   
   .imagem-assinatura {
-    height: 60px; /* Altura fixa para a assinatura na impressão */
+    height: 60px;
     width: 100%;
     display: flex;
     align-items: flex-end;
