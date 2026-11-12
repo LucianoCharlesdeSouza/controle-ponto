@@ -42,18 +42,60 @@ onMounted(async () => {
 function getValorHoraVigente(colabId, dataStr) {
   const valores = valoresHora.value
     .filter(v => v.colaboradorId === colabId)
-    .sort((a, b) => new Date(b.vigenciaInicio) - new Date(a.vigenciaInicio));
+    .sort((a, b) => new Date(b.vigenciaInicio).getTime() - new Date(a.vigenciaInicio).getTime());
     
-  const dataAlvo = new Date(`${dataStr}T23:59:59`).getTime();
+  // Pega apenas a parte da data (YYYY-MM-DD) para comparar
+  const dataAlvo = new Date(`${dataStr}T12:00:00`).getTime(); // Usa meio-dia para evitar problemas de fuso
   
   const valor = valores.find(v => {
-    const inicio = new Date(v.vigenciaInicio).getTime();
-    const fim = v.vigenciaFim ? new Date(v.vigenciaFim).getTime() : Infinity;
+    // Pega a data de início (YYYY-MM-DD)
+    const inicioStr = v.vigenciaInicio.split('T')[0];
+    const inicio = new Date(`${inicioStr}T00:00:00`).getTime();
+    
+    // Pega a data de fim (YYYY-MM-DD), se existir
+    let fim = Infinity;
+    if (v.vigenciaFim) {
+      const fimStr = v.vigenciaFim.split('T')[0];
+      fim = new Date(`${fimStr}T23:59:59`).getTime();
+    }
+    
     return dataAlvo >= inicio && dataAlvo <= fim;
   });
   
   return valor ? valor.valorCentavos : 0;
 }
+// function getValorHoraVigente(colabId, dataStr) {
+//   const valores = valoresHora.value
+//     .filter(v => v.colaboradorId === colabId)
+//     .sort((a, b) => new Date(b.vigenciaInicio).getTime() - new Date(a.vigenciaInicio).getTime());
+    
+//   // Converte a data do dia (ex: "2026-11-10") para o final do dia em milissegundos
+//   const dataAlvo = new Date(`${dataStr}T23:59:59`).getTime();
+  
+//   const valor = valores.find(v => {
+//     const inicio = new Date(v.vigenciaInicio).getTime();
+//     const fim = v.vigenciaFim ? new Date(v.vigenciaFim).getTime() : Infinity;
+    
+//     return dataAlvo >= inicio && dataAlvo <= fim;
+//   });
+  
+//   return valor ? valor.valorCentavos : 0;
+// }
+// function getValorHoraVigente(colabId, dataStr) {
+//   const valores = valoresHora.value
+//     .filter(v => v.colaboradorId === colabId)
+//     .sort((a, b) => new Date(b.vigenciaInicio) - new Date(a.vigenciaInicio));
+    
+//   const dataAlvo = new Date(`${dataStr}T23:59:59`).getTime();
+  
+//   const valor = valores.find(v => {
+//     const inicio = new Date(v.vigenciaInicio).getTime();
+//     const fim = v.vigenciaFim ? new Date(v.vigenciaFim).getTime() : Infinity;
+//     return dataAlvo >= inicio && dataAlvo <= fim;
+//   });
+  
+//   return valor ? valor.valorCentavos : 0;
+// }
 
 // Formata horário local
 function formatarHora(isoStr) {
@@ -534,6 +576,7 @@ function toggleDia(data) {
 /* .assinaturas { display: none; margin-top: 50px; gap: 40px; } */
 .assinaturas {
   display: flex;
+  flex-direction: column;
   gap: 20px;
   margin-top: 24px;
   margin-bottom: 24px;
