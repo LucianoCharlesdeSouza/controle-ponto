@@ -40,7 +40,6 @@ export default defineConfig({
         ],
         prefer_related_applications: false,
         icons: [
-          // Coloque seus ícones na pasta /public/icons/ e referencie aqui
           { 
             src: 'icons/controle-ponto-192.png', 
             sizes: '192x192', 
@@ -65,14 +64,14 @@ export default defineConfig({
         screenshots: [
           {
               "src": "icons/screenshots/desktop.png",
-              "sizes": "1901x877",
+              "sizes": "1920x878",
               "type": "image/png",
               "form_factor": "wide",
               "label": "Painel de controle"
           },
           {
               "src": "icons/screenshots/mobile.png",
-              "sizes": "404x728",
+              "sizes": "339x751",
               "type": "image/png",
               "form_factor": "narrow",
               "label": "Painel de controle mobile"
