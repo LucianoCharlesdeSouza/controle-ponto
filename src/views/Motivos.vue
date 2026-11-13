@@ -1,4 +1,3 @@
-<!-- src/views/Motivos.vue -->
 <script setup>
 import { ref, onMounted } from 'vue';
 import { getAllItems, addItem, putItem } from '../infrastructure/database.js';
@@ -109,7 +108,6 @@ async function alternarStatus(motivo) {
 
   <div class="page-container">
     
-    <!-- Formulário -->
     <div v-if="mostrarFormulario" class="card form-card">
       <div class="form-header">
         <h2>{{ editandoId ? 'Editar Motivo' : 'Novo Motivo' }}</h2>
@@ -146,7 +144,6 @@ async function alternarStatus(motivo) {
       </div>
     </div>
 
-    <!-- Lista -->
     <div class="lista" v-if="!mostrarFormulario">
       <div v-if="motivos.length === 0" class="empty-state">
         Nenhum motivo cadastrado. Clique em "+ Novo" para criar.
@@ -180,7 +177,6 @@ async function alternarStatus(motivo) {
 </template>
 
 <style scoped>
-/* Cabeçalho */
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -210,7 +206,6 @@ async function alternarStatus(motivo) {
 }
 .btn-back:hover { background: #f1f5f9; }
 
-/* Formulário */
 .form-card {
   border-top: 4px solid var(--color-primary);
 }
@@ -257,7 +252,6 @@ async function alternarStatus(motivo) {
 }
 .form-actions .btn { flex: 1; }
 
-/* Lista de Motivos */
 .lista {
   display: flex;
   flex-direction: column;

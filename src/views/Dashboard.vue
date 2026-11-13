@@ -1,4 +1,3 @@
-<!-- src/views/Dashboard.vue -->
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { getAllItems } from '../infrastructure/database.js';
@@ -10,7 +9,6 @@ const marcacoes = ref([]);
 const valoresHora = ref([]);
 const dataAtual = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
 
-// Dados de Backup
 const avisoBackup = ref(false);
 const diasSemBackup = ref(0);
 
@@ -28,7 +26,7 @@ const hojeStr = new Date().toISOString().split('T')[0];
 
 const statusEquipe = computed(() => {
   return colaboradores.value.map(colab => {
-    // Pega as marcações de hoje deste colaborador
+
     const marcsHoje = marcacoes.value
       .filter(m => m.colaboradorId === colab.id && m.dataHoraLocal.startsWith(hojeStr))
       .sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal));
@@ -97,17 +95,14 @@ function formatarMinutos(min) {
 </script>
 
 <template>
+
     <header class="app-header">
     <h1>Painel do Dia</h1>
     <p>{{ dataAtual }}</p>
   </header>
+  
   <div class="page-container">
-    <!-- <header>
-      <h1 class="page-title">Painel do Dia</h1>
-      <p class="page-subtitle">{{ dataAtual }}</p>
-    </header> -->
 
-    <!-- Aviso de Backup -->
     <div v-if="avisoBackup" class="backup-alert no-print">
       <div class="alert-icon">⚠️</div>
       <div class="alert-content">
@@ -118,7 +113,6 @@ function formatarMinutos(min) {
       <router-link to="/configuracoes" class="btn btn-danger" style="padding: 8px 16px; font-size: 0.85rem; white-space: nowrap;">Fazer Backup</router-link>
     </div>
 
-    <!-- Resumo Rápido (Cards mais largos e textos curtos) -->
     <div class="summary-grid">
       <div class="summary-card border-green">
         <span class="number">{{ resumo.trabalhando }}</span>
@@ -134,7 +128,6 @@ function formatarMinutos(min) {
       </div>
     </div>
 
-    <!-- Lista de Colaboradores -->
     <h2 class="section-title">Status da Equipe</h2>
     
     <div v-if="statusEquipe.length === 0" class="empty-state">
@@ -162,7 +155,6 @@ function formatarMinutos(min) {
 </template>
 
 <style scoped>
-/* Aviso de Backup Moderno */
 .backup-alert {
   background-color: #fff1f2;
   border: 1px solid #fecdd3;
@@ -179,7 +171,6 @@ function formatarMinutos(min) {
 .alert-content strong { color: #9f1239; display: block; font-size: 1rem; }
 .alert-content p { color: #be123c; font-size: 0.85rem; margin-top: 2px; }
 
-/* Grid de Resumo */
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -205,7 +196,6 @@ function formatarMinutos(min) {
 .number { font-size: 2.2rem; font-weight: 800; line-height: 1; margin-bottom: 6px; color: var(--color-text); }
 .label { font-size: 0.7rem; color: var(--color-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
 
-/* Lista de Equipe */
 .team-list {
   display: flex;
   flex-direction: column;

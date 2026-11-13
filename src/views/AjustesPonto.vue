@@ -1,4 +1,3 @@
-<!-- src/views/AjustesPonto.vue -->
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { getAllItems, putItem, addItem } from '../infrastructure/database.js';
@@ -11,7 +10,6 @@ const motivos = ref([]);
 const colaboradorSelecionadoId = ref('');
 const marcacoes = ref([]);
 
-// Formulário de Edição/Inclusão
 const editando = ref(false);
 const marcacaoAtual = ref(null);
 const justificativa = ref('');
@@ -31,7 +29,6 @@ onMounted(async () => {
   }
 });
 
-// Agrupa as marcações por dia para o colaborador selecionado
 const diasTrabalhados = computed(() => {
   const filtradas = marcacoes.value.filter(m => m.colaboradorId === colaboradorSelecionadoId.value);
   const dias = {};
@@ -43,7 +40,7 @@ const diasTrabalhados = computed(() => {
   });
 
   return Object.keys(dias)
-    .sort((a, b) => new Date(b) - new Date(a)) // Mais recentes primeiro
+    .sort((a, b) => new Date(b) - new Date(a))
     .map(dia => ({
       data: dia,
       items: dias[dia].sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal))
@@ -59,14 +56,13 @@ function formatarHora(isoStr) {
 }
 
 function abrirEdicao(marcacao) {
-  if (marcacao.anulada) return; // Bloqueia a edição se estiver anulada
+  if (marcacao.anulada) return;
   
   marcacaoAtual.value = JSON.parse(JSON.stringify(marcacao));
   justificativa.value = '';
   editando.value = true;
 }
 
-// Adicione esta nova função para reativar:
 async function reativarMarcacao(marcacao) {
   const confirmou = await showConfirm(
     'Reativar Marcação',
@@ -87,7 +83,6 @@ async function reativarMarcacao(marcacao) {
   }
 
   try {
-    // Registra na auditoria
     await addItem('ajustes', {
       id: uuidv4(),
       marcacaoId: marcacao.id,
@@ -98,7 +93,6 @@ async function reativarMarcacao(marcacao) {
       criadoEm: new Date().toISOString()
     });
 
-    // Atualiza no banco
     const marcacaoReativada = { ...marcacao, anulada: false };
     await putItem('marcacoes', JSON.parse(JSON.stringify(marcacaoReativada)));
 
@@ -227,7 +221,6 @@ async function anularMarcacao(marcacao) {
 
   <div class="page-container">
 
-    <!-- Filtro de Colaborador -->
     <div class="card filter-card no-print" v-if="!editando">
       <label class="form-label">Selecione o colaborador</label>
       <select v-model="colaboradorSelecionadoId" class="form-select">
@@ -237,7 +230,6 @@ async function anularMarcacao(marcacao) {
       </select>
     </div>
 
-    <!-- Lista de Dias -->
     <div v-if="!editando" class="lista-dias">
       <div v-if="diasTrabalhados.length === 0" class="empty-state">
         Nenhuma marcação encontrada para este colaborador.
@@ -258,7 +250,6 @@ async function anularMarcacao(marcacao) {
             class="marcacao-item" 
             :class="{ 'anulada': marc.anulada }"
           >
-            <!-- Área de clique para editar (desabilitada se anulada) -->
             <div 
               @click="abrirEdicao(marc)" 
               class="marcacao-content"
@@ -269,7 +260,6 @@ async function anularMarcacao(marcacao) {
               <span class="badge-tipo" :class="marc.natureza">{{ marc.natureza === 'trabalho' ? 'Trabalho' : 'Pausa' }}</span>
             </div>
             
-            <!-- Botão de Ação: Lixeira (Anular) ou Check (Reativar) -->
             <button 
               v-if="!marc.anulada"
               @click.stop="anularMarcacao(marc)" 
@@ -291,7 +281,6 @@ async function anularMarcacao(marcacao) {
       </div>
     </div>
 
-    <!-- Formulário de Edição/Inclusão (Focado) -->
     <div v-if="editando" class="card form-card">
       <div class="form-header">
         <h2>{{ marcacaoAtual.isNova ? 'Adicionar Marcação' : 'Editar Marcação' }}</h2>
@@ -328,14 +317,12 @@ async function anularMarcacao(marcacao) {
 </template>
 
 <style scoped>
-/* Filtro */
 .filter-card {
   padding: 16px;
   margin-bottom: 24px;
   border-top: 4px solid var(--color-primary);
 }
 
-/* Lista de Dias */
 .lista-dias {
   display: flex;
   flex-direction: column;
@@ -343,7 +330,7 @@ async function anularMarcacao(marcacao) {
 }
 
 .dia-card {
-  padding: 0; /* O padding será feito nos itens internos */
+  padding: 0;
   overflow: hidden;
 }
 
@@ -410,12 +397,10 @@ async function anularMarcacao(marcacao) {
 .badge-tipo.trabalho { background: var(--color-success-light); color: #065f46; }
 .badge-tipo.pausa { background: var(--color-warning-light); color: #92400e; }
 
-/* Estilos para item anulado */
 .marcacao-item.anulada { opacity: 0.6; background: #fff1f2; }
 .marcacao-item.anulada .hora, 
 .marcacao-item.anulada .motivo { text-decoration: line-through; color: #9f1239; }
 .marcacao-item.anulada .badge-tipo { display: none; }
-/* Garantir que a área de conteúdo não mude de cor no hover se estiver anulada */
 .marcacao-item.anulada .marcacao-content:hover {
   background: transparent;
 }
@@ -455,7 +440,6 @@ async function anularMarcacao(marcacao) {
   background: #dcfce7; 
 }
 
-/* Formulário de Edição */
 .form-card {
   border-top: 4px solid var(--color-primary);
 }
@@ -486,7 +470,6 @@ async function anularMarcacao(marcacao) {
 }
 .form-actions .btn { flex: 1; }
 
-/* Empty State */
 .empty-state {
   text-align: center;
   padding: 40px;

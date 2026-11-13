@@ -1,4 +1,3 @@
-<!-- src/views/Colaboradores.vue -->
 <script setup>
 import { ref, onMounted } from 'vue';
 import { getAllItems, addItem, putItem } from '../infrastructure/database.js';
@@ -36,7 +35,6 @@ async function carregarDados() {
     
     return { ...colab, valorAtualCentavos: valorAtual };
   }).sort((a, b) => {
-    // Ordena: Ativos primeiro, depois Inativos. Dentro do grupo, ordem alfabética.
     if (a.situacao !== b.situacao) {
       return a.situacao === 'ativo' ? -1 : 1;
     }
@@ -82,7 +80,6 @@ async function alternarStatus(colab) {
   if (!confirmou) return;
 
   try {
-    // Remove a propriedade virtual antes de salvar
     const colabParaSalvar = { ...colab, situacao: novoStatus };
     delete colabParaSalvar.valorAtualCentavos;
     
@@ -115,7 +112,7 @@ async function salvarColaborador() {
 
   try {
     if (editandoId.value) {
-      // --- EDIÇÃO ---
+
       const colabOriginal = colaboradores.value.find(c => c.id === editandoId.value);
       
       const colabAtualizado = {
@@ -129,10 +126,8 @@ async function salvarColaborador() {
 
       await putItem('colaboradores', JSON.parse(JSON.stringify(colabAtualizado)));
 
-      // Verifica se o valor da hora realmente mudou
       if (colabOriginal.valorAtualCentavos !== novoValorCentavos) {
         
-        // 1. Fecha a vigência de TODOS os valores antigos
         const valoresAntigos = valoresHora.value.filter(v => v.colaboradorId === editandoId.value);
         
         for (const vAntigo of valoresAntigos) {
@@ -150,7 +145,6 @@ async function salvarColaborador() {
           }
         }
 
-        // 2. Cria o novo valor
         await addItem('valoresHora', {
           id: uuidv4(),
           colaboradorId: editandoId.value,
@@ -160,7 +154,7 @@ async function salvarColaborador() {
         });
       }      
     } else {
-      // --- CRIAÇÃO ---
+
       const idColab = uuidv4();
       const novoColab = {
         id: idColab,
@@ -211,7 +205,6 @@ function formatarReal(centavos) {
   
   <div class="page-container">
     
-    <!-- Formulário de Cadastro/Edição -->
     <div v-if="mostrarFormulario" class="card form-card">
       <h2 class="section-title">{{ editandoId ? 'Editar Colaborador' : 'Novo Colaborador' }}</h2>
       
@@ -262,7 +255,6 @@ function formatarReal(centavos) {
       </div>
     </div>
 
-    <!-- Lista de Colaboradores -->
     <div class="lista" v-if="!mostrarFormulario">
       <div v-if="colaboradores.length === 0" class="empty-state">
         Nenhum colaborador cadastrado ainda.
@@ -295,7 +287,6 @@ function formatarReal(centavos) {
 </template>
 
 <style scoped>
-/* Cabeçalho Flexível */
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -303,7 +294,6 @@ function formatarReal(centavos) {
   margin-bottom: 24px;
 }
 
-/* Formulário em Grid (2 colunas em telas maiores) */
 .form-row {
   display: grid;
   grid-template-columns: 1fr;
@@ -334,7 +324,6 @@ function formatarReal(centavos) {
   border-left: 4px solid var(--color-warning);
 }
 
-/* Cards de Colaborador */
 .lista {
   display: flex;
   flex-direction: column;
@@ -349,7 +338,7 @@ function formatarReal(centavos) {
   padding: 16px 20px;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  border-left: 5px solid var(--color-success); /* Borda verde para ativo */
+  border-left: 5px solid var(--color-success);
   transition: transform 0.2s;
 }
 .team-card:active { transform: scale(0.99); }

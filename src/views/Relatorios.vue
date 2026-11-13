@@ -1,4 +1,3 @@
-<!-- src/views/Relatorios.vue -->
 <script setup>
 import { ref, onMounted } from 'vue';
 import { getAllItems } from '../infrastructure/database.js';
@@ -12,7 +11,7 @@ const marcacoes = ref([]);
 const valoresHora = ref([]);
 const ajustes = ref([]);
 
-const tipoRelatorio = ref('mensal'); // 'mensal', 'anual', 'ajustes'
+const tipoRelatorio = ref('mensal');
 const colaboradorSelecionadoId = ref('');
 const mesSelecionado = ref(new Date().toISOString().slice(0, 7));
 const anoSelecionado = ref(new Date().getFullYear());
@@ -244,7 +243,6 @@ function toggleDia(data) {
 
   <div class="page-container">
 
-    <!-- Filtros -->
     <div class="card filter-card no-print">
       <div class="tabs-container">
         <button :class="{ active: tipoRelatorio === 'mensal' }" @click="tipoRelatorio = 'mensal'">Mensal</button>
@@ -301,44 +299,46 @@ function toggleDia(data) {
         </div>
 
         <div class="card table-card">
-          <table class="tabela no-print">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Horas</th>
-                <th>Valor</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-for="dia in relatorioGerado.dias" :key="dia.data">
-                <tr @click="toggleDia(dia.data)" style="cursor: pointer;" :class="{ 'linha-ativa': diaExpandido === dia.data }">
-                  <td class="font-bold">
-                    {{ dia.data.split('-').reverse().join('/') }}
-                    <span v-if="dia.anuladas.length > 0" title="Possui marcações excluídas" class="asterisco">*</span>
-                  </td>
-                  <td>{{ Math.floor(dia.minutos / 60) }}h {{ String(dia.minutos % 60).padStart(2, '0') }}m</td>
-                  <td>{{ formatarCentavosParaReal(dia.valorCentavos) }}</td>
-                  <td class="text-right">
-                    <span v-if="dia.inconsistencias.length > 0" class="alerta" title="Inconsistências" @click.stop="diaInconsistente = dia">⚠️</span>
-                    <span class="expand-icon">{{ diaExpandido === dia.data ? '▲' : '▼' }}</span>
-                  </td>
+          <div class="table-responsive no-print">
+            <table class="tabela">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Horas</th>
+                  <th>Valor</th>
+                  <th></th>
                 </tr>
-                <tr v-if="diaExpandido === dia.data" class="detalhe-row">
-                  <td colspan="4">
-                    <div class="detalhe-pontos">
-                      <div v-for="(h, idx) in dia.horarios" :key="idx" class="ponto-badge" :class="h.natureza">
-                        <strong>{{ h.hora }}</strong> {{ h.motivo }}
+              </thead>
+              <tbody>
+                <template v-for="dia in relatorioGerado.dias" :key="dia.data">
+                  <tr @click="toggleDia(dia.data)" style="cursor: pointer;" :class="{ 'linha-ativa': diaExpandido === dia.data }">
+                    <td class="font-bold">
+                      {{ dia.data.split('-').reverse().join('/') }}
+                      <span v-if="dia.anuladas.length > 0" title="Possui marcações excluídas" class="asterisco">*</span>
+                    </td>
+                    <td>{{ Math.floor(dia.minutos / 60) }}h {{ String(dia.minutos % 60).padStart(2, '0') }}m</td>
+                    <td>{{ formatarCentavosParaReal(dia.valorCentavos) }}</td>
+                    <td class="text-right">
+                      <span v-if="dia.inconsistencias.length > 0" class="alerta" title="Inconsistências" @click.stop="diaInconsistente = dia">⚠️</span>
+                      <span class="expand-icon">{{ diaExpandido === dia.data ? '▲' : '▼' }}</span>
+                    </td>
+                  </tr>
+                  <tr v-if="diaExpandido === dia.data" class="detalhe-row">
+                    <td colspan="4">
+                      <div class="detalhe-pontos">
+                        <div v-for="(h, idx) in dia.horarios" :key="idx" class="ponto-badge" :class="h.natureza">
+                          <strong>{{ h.hora }}</strong> {{ h.motivo }}
+                        </div>
+                        <div v-for="(a, idx) in dia.anuladas" :key="'anulada-'+idx" class="ponto-badge anulada">
+                          <del>{{ formatarHora(a.dataHoraLocal) }}</del> (Anulado)
+                        </div>
                       </div>
-                      <div v-for="(a, idx) in dia.anuladas" :key="'anulada-'+idx" class="ponto-badge anulada">
-                        <del>{{ formatarHora(a.dataHoraLocal) }}</del> (Anulado)
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+        </div>
 
           <!-- TABELA DE IMPRESSÃO -->
           <table class="tabela print-only">
@@ -399,39 +399,41 @@ function toggleDia(data) {
       <!-- ABA ANUAL -->
       <div v-if="relatorioGerado.tipo === 'anual'">
         <div class="card table-card">
-          <table class="tabela">
-            <thead>
-              <tr>
-                <th>Colaborador</th>
-                <th>Horas</th>
-                <th class="text-right">Total a Pagar</th>
-                <th class="no-print"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-for="colab in relatorioGerado.dadosConsolidados" :key="colab.id">
-                <tr @click="toggleDia(colab.id)" style="cursor: pointer;" :class="{ 'linha-ativa': diaExpandido === colab.id }">
-                  <td class="font-bold">{{ colab.nome }}</td>
-                  <td>{{ colab.horasStr }}</td>
-                  <td class="text-right valor-tabela">{{ formatarCentavosParaReal(colab.centavos) }}</td>
-                  <td class="no-print text-right expand-icon">
-                    {{ diaExpandido === colab.id ? '▲' : '▼' }}
-                  </td>
+          <div class="table-responsive">
+            <table class="tabela">
+              <thead>
+                <tr>
+                  <th>Colaborador</th>
+                  <th>Horas</th>
+                  <th class="text-right">Total a Pagar</th>
+                  <th class="no-print"></th>
                 </tr>
-                <tr v-if="diaExpandido === colab.id" class="detalhe-row no-print">
-                  <td colspan="4">
-                    <div class="detalhe-meses">
-                      <div v-for="m in colab.meses" :key="m.mes" class="mes-badge">
-                        <span class="mes-label">{{ m.mes.split('-').reverse().join('/') }}</span>
-                        <strong class="mes-horas">{{ Math.floor(m.minutos / 60) }}h {{ String(m.minutos % 60).padStart(2, '0') }}m</strong>
-                        <span class="mes-val">{{ formatarCentavosParaReal(m.centavos) }}</span>
+              </thead>
+              <tbody>
+                <template v-for="colab in relatorioGerado.dadosConsolidados" :key="colab.id">
+                  <tr @click="toggleDia(colab.id)" style="cursor: pointer;" :class="{ 'linha-ativa': diaExpandido === colab.id }">
+                    <td class="font-bold">{{ colab.nome }}</td>
+                    <td>{{ colab.horasStr }}</td>
+                    <td class="text-right valor-tabela">{{ formatarCentavosParaReal(colab.centavos) }}</td>
+                    <td class="no-print text-right expand-icon">
+                      {{ diaExpandido === colab.id ? '▲' : '▼' }}
+                    </td>
+                  </tr>
+                  <tr v-if="diaExpandido === colab.id" class="detalhe-row no-print">
+                    <td colspan="4">
+                      <div class="detalhe-meses">
+                        <div v-for="m in colab.meses" :key="m.mes" class="mes-badge">
+                          <span class="mes-label">{{ m.mes.split('-').reverse().join('/') }}</span>
+                          <strong class="mes-horas">{{ Math.floor(m.minutos / 60) }}h {{ String(m.minutos % 60).padStart(2, '0') }}m</strong>
+                          <span class="mes-val">{{ formatarCentavosParaReal(m.centavos) }}</span>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>  
         </div>
       </div>
 
@@ -441,31 +443,33 @@ function toggleDia(data) {
           <div v-if="relatorioGerado.ajustes.length === 0" class="empty-state">
             Nenhum ajuste registrado neste mês.
           </div>
-          <table class="tabela" v-else>
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Colaborador</th>
-                <th>Alteração</th>
-                <th>Justificativa</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="aj in relatorioGerado.ajustes" :key="aj.id">
-                <td class="text-muted text-small">{{ new Date(aj.criadoEm).toLocaleDateString('pt-BR') }}</td>
-                <td class="font-bold">{{ aj.nomeColab }}<br><small class="text-muted">{{ aj.dataMarcacao.split('-').reverse().join('/') }}</small></td>
-                <td>
-                  <div class="alteracao-box">
-                    <del class="text-muted text-small">{{ aj.horaOriginal }}</del>
-                    <span class="arrow">→</span>
-                    <strong v-if="aj.horaCorrigida !== 'Excluído'" class="text-success">{{ aj.horaCorrigida }}</strong>
-                    <span v-else class="text-danger font-bold text-small">Excluído</span>
-                  </div>
-                </td>
-                <td class="text-small">{{ aj.justificativa }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-responsive" v-else>
+            <table class="tabela">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Colaborador</th>
+                  <th>Alteração</th>
+                  <th>Justificativa</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="aj in relatorioGerado.ajustes" :key="aj.id">
+                  <td class="text-muted text-small">{{ new Date(aj.criadoEm).toLocaleDateString('pt-BR') }}</td>
+                  <td class="font-bold">{{ aj.nomeColab }}<br><small class="text-muted">{{ aj.dataMarcacao.split('-').reverse().join('/') }}</small></td>
+                  <td>
+                    <div class="alteracao-box">
+                      <del class="text-muted text-small">{{ aj.horaOriginal }}</del>
+                      <span class="arrow">→</span>
+                      <strong v-if="aj.horaCorrigida !== 'Excluído'" class="text-success">{{ aj.horaCorrigida }}</strong>
+                      <span v-else class="text-danger font-bold text-small">Excluído</span>
+                    </div>
+                  </td>
+                  <td class="justificativa-cell text-small">{{ aj.justificativa }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>    
         </div>
       </div>
 
@@ -568,6 +572,8 @@ function toggleDia(data) {
 .tabela {
   width: 100%;
   border-collapse: collapse;
+  white-space: nowrap; 
+  min-width: 600px; 
 }
 .tabela th {
   text-align: left;
@@ -579,6 +585,13 @@ function toggleDia(data) {
   text-transform: uppercase;
   border-bottom: 1px solid #e2e8f0;
 }
+
+.tabela td.justificativa-cell {
+  white-space: normal;
+  min-width: 200px;
+  max-width: 300px;
+}
+
 .tabela td {
   padding: 14px 16px;
   border-bottom: 1px solid #f1f5f9;
@@ -665,6 +678,10 @@ function toggleDia(data) {
   .print-header { display: block; margin-bottom: 20px; text-align: center; }
   .print-header h2 { font-size: 1.3rem; margin-bottom: 8px; }
   
+  .tabela {
+    min-width: 100% !important; 
+  }
+  
   .tabela { font-size: 0.85rem; }
   .tabela th { background: #eee; border: 1px solid #ccc; padding: 6px 4px; }
   .tabela td { padding: 6px 4px; border: 1px solid #ccc; }
@@ -717,5 +734,17 @@ function toggleDia(data) {
     font-size: 0.85rem;
     color: #333;
   }  
+
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch; /* Deslizar suave no iOS */
+  /* Esconde a barra de rolagem feia no Chrome/Safari */
+  scrollbar-width: none; 
+}
+.table-responsive::-webkit-scrollbar {
+  display: none;
 }
 </style>

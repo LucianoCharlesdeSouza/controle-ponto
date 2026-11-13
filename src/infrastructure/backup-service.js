@@ -156,3 +156,98 @@ export async function estimativaArmazenamento() {
   if (!navigator.storage || !navigator.storage.estimate) return null;
   try { return await navigator.storage.estimate(); } catch { return null; }
 }
+
+// ... funções existentes ...
+
+export async function restaurarBackupParcial(file, opcoes) {
+  const text = await file.text();
+  const arquivo = JSON.parse(text);
+
+  if (!arquivo.checksum || !arquivo.payload) {
+    throw new Error('Arquivo de backup inválido.');
+  }
+
+  const hashCalculado = await calcularHash(arquivo.payload);
+  if (hashCalculado !== arquivo.checksum) {
+    throw new Error('O arquivo está corrompido (falha no checksum).');
+  }
+
+  const data = JSON.parse(arquivo.payload);
+  const db = await getDB();
+  const resumo = { colaboradores: 0, marcacoes: 0, ajustes: 0 };
+
+  // 1. Se o usuário marcou para restaurar Colaboradores e Motivos
+  if (opcoes.cadastros) {
+    for (const storeName of ['colaboradores', 'motivos', 'valoresHora']) {
+      if (!data[storeName]) continue;
+      const tx = db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      
+      // Para cadastros, geralmente queremos apenas ADICIONAR os que não existem
+      // para não sobrescrever dados novos criados recentemente
+      for (const item of data[storeName]) {
+        await new Promise((resolve, reject) => {
+          const getReq = store.get(item.id);
+          getReq.onsuccess = () => {
+            if (!getReq.result) { // Só adiciona se não existir
+              const putReq = store.put(item);
+              putReq.onsuccess = resolve;
+              putReq.onerror = reject;
+              resumo.colaboradores++;
+            } else {
+              resolve(); // Já existe, pula
+            }
+          };
+          getReq.onerror = reject;
+        });
+      }
+    }
+  }
+
+  // 2. Se o usuário marcou para restaurar Movimentações (Pontos e Ajustes)
+  if (opcoes.movimentacoes && opcoes.dataInicio && opcoes.dataFim) {
+    const inicioStr = opcoes.dataInicio; // YYYY-MM-DD
+    const fimStr = opcoes.dataFim; // YYYY-MM-DD
+
+    // Restaura Marcações do período
+    if (data.marcacoes) {
+      const marcasFiltradas = data.marcacoes.filter(m => {
+        const d = m.dataHoraLocal.split('T')[0];
+        return d >= inicioStr && d <= fimStr;
+      });
+
+      const tx = db.transaction('marcacoes', 'readwrite');
+      const store = tx.objectStore('marcacoes');
+      for (const item of marcasFiltradas) {
+        await new Promise((resolve, reject) => {
+          const req = store.put(item); // put sobrescreve se o ID for igual, o que é bom para atualizar
+          req.onsuccess = resolve;
+          req.onerror = reject;
+          resumo.marcacoes++;
+        });
+      }
+    }
+
+    // Restaura Ajustes do período (baseado na data em que foram criados)
+    if (data.ajustes) {
+      const ajustesFiltrados = data.ajustes.filter(a => {
+        const d = a.criadoEm.split('T')[0];
+        return d >= inicioStr && d <= fimStr;
+      });
+
+      const tx = db.transaction('ajustes', 'readwrite');
+      const store = tx.objectStore('ajustes');
+      for (const item of ajustesFiltrados) {
+        await new Promise((resolve, reject) => {
+          const req = store.put(item);
+          req.onsuccess = resolve;
+          req.onerror = reject;
+          resumo.ajustes++;
+        });
+      }
+    }
+  }
+
+  await putItem('settings', { key: 'lastRestoreAt', value: new Date().toISOString() });
+  return resumo;
+}

@@ -1,4 +1,3 @@
-<!-- src/views/Ponto.vue -->
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { getAllItems, addItem } from '../infrastructure/database.js';
@@ -14,8 +13,8 @@ const marcacoesHoje = ref([]);
 const valoresHora = ref([]);
 const registrando = ref(false);
 
-// Carregar dados
 onMounted(async () => {
+
   const todosMotivos = await getAllItems('motivos');
   motivos.value = todosMotivos
     .filter(m => m.ativo !== false)
@@ -36,14 +35,12 @@ onMounted(async () => {
 
 const dataAtual = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
 
-// Filtra marcações do colaborador selecionado
 const minhasMarcacoesHoje = computed(() => {
   return marcacoesHoje.value
     .filter(m => m.colaboradorId === colaboradorSelecionadoId.value)
     .sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal));
 });
 
-// Calcula as horas trabalhadas hoje para o colaborador selecionado
 const resumoHoje = computed(() => {
   if (!colaboradorSelecionadoId.value) return { minutos: 0, horasStr: '0h 00m' };
   
@@ -115,7 +112,6 @@ async function registrarPonto(motivo) {
     </header>
   <div class="page-container">
 
-    <!-- Seletor de Colaborador (Scroll Horizontal) -->
     <div class="colaborador-selector no-print">
       <button 
         v-for="colab in colaboradores" 
@@ -124,11 +120,10 @@ async function registrarPonto(motivo) {
         class="colab-pill"
         :class="{ active: colaboradorSelecionadoId === colab.id }"
       >
-        {{ colab.nome.split(' ')[0] }} <!-- Mostra só o primeiro nome para não quebrar -->
+        {{ colab.nome.split(' ')[0] }}
       </button>
     </div>
 
-    <!-- Painel de Status Atual -->
     <div class="status-panel card">
       <div class="status-content">
         <div class="status-info">
@@ -141,7 +136,6 @@ async function registrarPonto(motivo) {
       </div>
     </div>
 
-    <!-- Botões de Ação (Gigantes) -->
     <div class="actions-grid">
       <button 
         v-for="motivo in motivos" 
@@ -151,13 +145,11 @@ async function registrarPonto(motivo) {
         :class="motivo.natureza === 'trabalho' ? 'btn-entrada' : 'btn-pausa'"
         :disabled="registrando"
       >
-        <!-- Ícone dinâmico baseado na natureza -->
         <span class="action-icon">{{ motivo.natureza === 'trabalho' ? '▶️' : '⏸️' }}</span>
         <span class="action-text">{{ motivo.nome }}</span>
       </button>
     </div>
 
-    <!-- Histórico do Dia -->
     <div class="card">
       <h2 class="section-title">Histórico de Hoje</h2>
       <ul v-if="minhasMarcacoesHoje.length > 0" class="history-list">
@@ -172,16 +164,17 @@ async function registrarPonto(motivo) {
 </template>
 
 <style scoped>
-/* Seletor de Colaborador */
+
 .colaborador-selector {
   display: flex;
   gap: 10px;
   overflow-x: auto;
   padding-bottom: 16px;
   margin-bottom: 8px;
-  -webkit-overflow-scrolling: touch; /* Scroll suave no iOS */
+  -webkit-overflow-scrolling: touch; 
 }
-.colaborador-selector::-webkit-scrollbar { display: none; } /* Esconde a barra de rolagem */
+
+.colaborador-selector::-webkit-scrollbar { display: none; }
 
 .colab-pill {
   background: white;
@@ -195,6 +188,7 @@ async function registrarPonto(motivo) {
   white-space: nowrap;
   transition: all 0.2s;
 }
+
 .colab-pill.active {
   background: var(--color-primary);
   border-color: var(--color-primary);
@@ -202,8 +196,6 @@ async function registrarPonto(motivo) {
   box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
 }
 
-/* Painel de Status */
-/* Painel de Status */
 .status-panel {
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
   color: white;
@@ -224,7 +216,7 @@ async function registrarPonto(motivo) {
 .status-info {
   display: flex;
   flex-direction: column;
-  flex: 1; /* Faz essa parte ocupar o espaço disponível */
+  flex: 1;
 }
 
 .status-name {
@@ -232,7 +224,6 @@ async function registrarPonto(motivo) {
   font-weight: 700;
   line-height: 1.3;
   margin-bottom: 4px;
-  /* Impede que nomes muito longos estraguem o layout */
   display: -webkit-box;
   line-clamp: 2;
   -webkit-line-clamp: 2;
@@ -252,7 +243,7 @@ async function registrarPonto(motivo) {
   font-size: 2.2rem;
   font-weight: 800;
   line-height: 1;
-  white-space: nowrap; /* Impede que 0h 02m quebre para a linha de baixo */
+  white-space: nowrap;
   text-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
@@ -264,15 +255,15 @@ async function registrarPonto(motivo) {
 }
 
 
-/* Botões de Ação Gigantes */
 .actions-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr); /* 2 colunas no celular */
+  grid-template-columns: repeat(2, 1fr); 
   gap: 16px;
   margin-bottom: 32px;
 }
+
 @media (min-width: 600px) {
-  .actions-grid { grid-template-columns: repeat(3, 1fr); } /* 3 colunas no PC */
+  .actions-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
 .btn-action {
@@ -290,6 +281,7 @@ async function registrarPonto(motivo) {
   transition: all 0.15s;
   box-shadow: var(--shadow-sm);
 }
+
 .btn-action:active { transform: scale(0.95); }
 .btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -299,12 +291,12 @@ async function registrarPonto(motivo) {
 .btn-entrada { background: var(--color-success); }
 .btn-pausa { background: var(--color-warning); }
 
-/* Histórico */
 .history-list {
   list-style: none;
   padding: 0;
   margin: 0;
 }
+
 .history-list li {
   display: flex;
   justify-content: space-between;
@@ -312,6 +304,7 @@ async function registrarPonto(motivo) {
   padding: 12px 0;
   border-bottom: 1px solid #f1f5f9;
 }
+
 .history-list li:last-child { border-bottom: none; }
 
 .history-time {
@@ -333,4 +326,5 @@ async function registrarPonto(motivo) {
   padding: 20px;
   color: var(--color-muted);
 }
+
 </style>
