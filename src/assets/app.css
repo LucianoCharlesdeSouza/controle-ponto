@@ -42,9 +42,37 @@ body {
 
 /* Classes Utilitárias Globais */
 .page-container {
-    padding: 16px;
+    padding: 0px 16px 16px 16px;
     max-width: 800px;
     margin: 0 auto;
+}
+
+/* Header Padrão do App */
+.app-header {
+    background-color: var(--color-surface);
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    margin-bottom: 24px;
+}
+
+.app-header h1 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--color-text);
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.app-header p {
+    font-size: 0.85rem;
+    color: var(--color-muted);
+    margin: 4px 0 0 0;
+    text-transform: capitalize;
 }
 
 .page-title {

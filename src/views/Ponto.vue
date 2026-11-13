@@ -4,6 +4,7 @@ import { ref, onMounted, computed } from 'vue';
 import { getAllItems, addItem } from '../infrastructure/database.js';
 import { apurarDia } from '../domain/ApuracaoJornada.js';
 import { v4 as uuidv4 } from 'uuid';
+import { showToast, showConfirm } from '../application/NotificationService.js';
 
 // Estado
 const motivos = ref([]);
@@ -100,7 +101,7 @@ async function registrarPonto(motivo) {
     await carregarMarcacoesHoje();
     if (navigator.vibrate) navigator.vibrate(50);
   } catch (e) {
-    alert('Erro ao registrar ponto: ' + e);
+    showToast('Erro ao registrar ponto: ' + e, 'error');
   } finally {
     setTimeout(() => { registrando.value = false; }, 2000); 
   }
@@ -108,11 +109,11 @@ async function registrarPonto(motivo) {
 </script>
 
 <template>
-  <div class="page-container">
-    <header>
-      <h1 class="page-title">Registrar Ponto</h1>
-      <p class="page-subtitle">{{ dataAtual }}</p>
+      <header class="app-header">
+      <h1>Registrar Ponto</h1>
+      <p>{{ dataAtual }}</p>
     </header>
+  <div class="page-container">
 
     <!-- Seletor de Colaborador (Scroll Horizontal) -->
     <div class="colaborador-selector no-print">
@@ -129,11 +130,15 @@ async function registrarPonto(motivo) {
 
     <!-- Painel de Status Atual -->
     <div class="status-panel card">
-      <div class="status-header">
-        <span class="status-name">{{ colaboradorAtualNome }}</span>
-        <span class="status-time">{{ resumoHoje.horasStr }}</span>
+      <div class="status-content">
+        <div class="status-info">
+          <span class="status-name">{{ colaboradorAtualNome }}</span>
+          <span class="status-label">Trabalhado hoje</span>
+        </div>
+        <div class="status-time">
+          {{ resumoHoje.horasStr }}
+        </div>
       </div>
-      <p class="status-label">Total trabalhado hoje</p>
     </div>
 
     <!-- Botões de Ação (Gigantes) -->
@@ -198,37 +203,66 @@ async function registrarPonto(motivo) {
 }
 
 /* Painel de Status */
+/* Painel de Status */
 .status-panel {
-  background: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
   color: white;
-  text-align: center;
   padding: 24px;
   border: none;
   border-radius: var(--radius-lg);
   margin-bottom: 24px;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.4);
 }
+
+.status-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.status-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1; /* Faz essa parte ocupar o espaço disponível */
+}
+
+.status-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin-bottom: 4px;
+  /* Impede que nomes muito longos estraguem o layout */
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.status-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.8;
+}
+
+.status-time {
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap; /* Impede que 0h 02m quebre para a linha de baixo */
+  text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
 .status-header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   margin-bottom: 8px;
 }
-.status-name {
-  font-size: 1.1rem;
-  font-weight: 600;
-  opacity: 0.9;
-}
-.status-time {
-  font-size: 2rem;
-  font-weight: 800;
-}
-.status-label {
-  font-size: 0.85rem;
-  opacity: 0.8;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
+
 
 /* Botões de Ação Gigantes */
 .actions-grid {

@@ -8,6 +8,8 @@ import {
   ultimoBackup, 
   estimativaArmazenamento 
 } from '../infrastructure/backup-service.js';
+import { showToast, showConfirm } from '../application/NotificationService.js';
+
 
 const importando = ref(false);
 const dataUltimoBackup = ref(null);
@@ -25,14 +27,14 @@ onMounted(async () => {
 async function fazerBackupCompartilhar() {
   const resultado = await compartilharOuBaixarBackup();
   if (resultado === 'share') {
-    alert('Backup compartilhado com sucesso!');
+    showToast('Backup compartilhado com sucesso!', 'success');
   }
   dataUltimoBackup.value = new Date().toISOString();
 }
 
 async function fazerBackupDownload() {
   await baixarBackup();
-  alert('Backup baixado com sucesso!');
+  showToast('Backup baixado com sucesso!', 'success');
   dataUltimoBackup.value = new Date().toISOString();
 }
 
@@ -40,7 +42,7 @@ async function importarBackup(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  if (!confirm('ATENÇÃO: A restauração irá SUBSTITUIR todos os dados atuais. Deseja continuar?')) {
+  if (!await showConfirm('Restaurar Backup', 'ATENÇÃO: A restauração irá SUBSTITUIR todos os dados atuais. Deseja continuar?')) {
     event.target.value = '';
     return;
   }
@@ -49,12 +51,20 @@ async function importarBackup(event) {
 
   try {
     const resultado = await restaurarBackup(file);
-    alert(`Backup restaurado com sucesso!\n\n${resultado.colaboradores} colaboradores\n${resultado.marcacoes} marcações\n${resultado.motivos} motivos`);
-    window.location.reload();
+
+   // Mostra o toast com os detalhes e sem auto-hide (fica na tela até recarregar)
+    const msg = `Sucesso! ${resultado.colaboradores} colab., ${resultado.marcacoes} marcações, ${resultado.motivos} motivos restaurados.`;
+
+    showToast(msg, 'success', false);
+    
+    setTimeout(() => {
+      window.location.reload();
+    }, 4000);
+
   } catch (e) {
-    alert('Erro ao restaurar: ' + e.message);
+    showToast('Erro ao restaurar: ', 'error');
   } finally {
-    importando.value = false;
+    importando.value = false;''
     event.target.value = '';
   }
 }
@@ -66,11 +76,13 @@ function formatarData(isoStr) {
 </script>
 
 <template>
+
+  <header class="app-header">
+    <h1>Configurações</h1>
+    <p>Gestão do sistema e dados</p>
+  </header>
+
   <div class="page-container">
-    <header>
-      <h1 class="page-title">Configurações</h1>
-      <p class="page-subtitle">Gestão do sistema e dados</p>
-    </header>
 
     <!-- Ações Rápidas -->
     <div class="card action-card">

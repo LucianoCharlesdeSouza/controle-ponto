@@ -3,6 +3,8 @@
 import { ref, onMounted } from 'vue';
 import { getAllItems, addItem, putItem } from '../infrastructure/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { showToast, showConfirm } from '../application/NotificationService.js';
+
 
 const motivos = ref([]);
 const mostrarFormulario = ref(false);
@@ -40,7 +42,7 @@ function abrirEdicao(motivo) {
 
 async function salvarMotivo() {
   if (!form.value.nome.trim()) {
-    alert('O nome do motivo é obrigatório.');
+    showToast('O nome do motivo é obrigatório.', 'info');
     return;
   }
 
@@ -61,11 +63,11 @@ async function salvarMotivo() {
       await addItem('motivos', JSON.parse(JSON.stringify(motivoDados)));
     }
 
-    alert('Motivo salvo com sucesso!');
+    showToast('Motivo salvo com sucesso!', 'success');
     mostrarFormulario.value = false;
     await carregarMotivos();
   } catch (e) {
-    alert('Erro ao salvar motivo: ' + e.message);
+    showToast('Erro ao salvar motivo: ', 'error');
   }
 }
 
@@ -75,36 +77,38 @@ async function alternarStatus(motivo) {
     ? `Desativar "${motivo.nome}"? Ele não aparecerá mais na tela de ponto.`
     : `Reativar "${motivo.nome}"?`;
 
-  if (!confirm(msg)) return;
+  const confirmou = await showConfirm('Alterar Status', msg);
+  if (!confirmou) return;
 
   try {
     await putItem('motivos', JSON.parse(JSON.stringify({ ...motivo, ativo: novoStatus })));
     await carregarMotivos();
+    showToast('Status alterado com sucesso!', 'success');
   } catch (e) {
-    alert('Erro ao alterar status: ' + e);
+    showToast('Erro ao alterar status.', 'error');
   }
 }
 </script>
 
 <template>
+
+  <header class="app-header" style="display: flex; justify-content: space-between; align-items: center; text-align: left;">
+    <div class="header-left">
+      <router-link to="/configuracoes" class="btn-back" title="Voltar para Configurações">
+        ←
+      </router-link>
+      <div>
+        <h1 class="page-title" style="text-align: left; margin-bottom: 0; font-size: 1.3rem;">Motivos</h1>
+        <p class="page-subtitle" style="text-align: left; margin-bottom: 0;">Botões da tela de ponto</p>
+      </div>
+    </div>
+    <button @click="abrirNovo" class="btn btn-primary" v-if="!mostrarFormulario">
+      + Novo
+    </button>
+  </header>  
+
   <div class="page-container">
     
-    <!-- Cabeçalho -->
-    <header class="page-header">
-      <div class="header-left">
-        <router-link to="/configuracoes" class="btn-back" title="Voltar para Configurações">
-          ←
-        </router-link>
-        <div>
-          <h1 class="page-title" style="text-align: left; margin-bottom: 0; font-size: 1.3rem;">Motivos</h1>
-          <p class="page-subtitle" style="text-align: left; margin-bottom: 0;">Botões da tela de ponto</p>
-        </div>
-      </div>
-      <button @click="abrirNovo" class="btn btn-primary" v-if="!mostrarFormulario">
-        + Novo
-      </button>
-    </header>
-
     <!-- Formulário -->
     <div v-if="mostrarFormulario" class="card form-card">
       <div class="form-header">

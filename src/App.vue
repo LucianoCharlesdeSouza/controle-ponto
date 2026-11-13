@@ -1,4 +1,7 @@
-<!-- src/App.vue -->
+<script setup>
+import NotificationCenter from './components/NotificationCenter.vue';
+</script>
+
 <template>
   <div class="app-wrapper">
     <main class="page-content">
@@ -31,6 +34,9 @@
         <span class="text">Config</span>
       </router-link>      
     </nav>
+    
+    <!-- O Centro de Notificações Global -->
+    <NotificationCenter />
   </div>
 </template>
 

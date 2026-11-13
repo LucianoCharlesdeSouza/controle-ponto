@@ -24,8 +24,8 @@ export default defineConfig({
         lang: 'pt-BR',
         dir: 'ltr',
         orientation: 'any',
-        theme_color: '#2e7d32',
-        background_color: '#ffffff',
+        theme_color: '#2563eb',      // Nosso Azul Principal (cor da barra de status no celular)
+        background_color: '#f1f5f9', // Nosso Cinza de Fundo (tela de splash ao abrir o app)
         display: 'standalone',
         display_override: [
         'standalone',

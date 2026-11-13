@@ -97,11 +97,15 @@ function formatarMinutos(min) {
 </script>
 
 <template>
+    <header class="app-header">
+    <h1>Painel do Dia</h1>
+    <p>{{ dataAtual }}</p>
+  </header>
   <div class="page-container">
-    <header>
+    <!-- <header>
       <h1 class="page-title">Painel do Dia</h1>
       <p class="page-subtitle">{{ dataAtual }}</p>
-    </header>
+    </header> -->
 
     <!-- Aviso de Backup -->
     <div v-if="avisoBackup" class="backup-alert no-print">

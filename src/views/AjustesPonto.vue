@@ -3,6 +3,8 @@
 import { ref, onMounted, computed } from 'vue';
 import { getAllItems, putItem, addItem } from '../infrastructure/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { showToast, showConfirm, showPrompt } from '../application/NotificationService.js';
+
 
 const colaboradores = ref([]);
 const motivos = ref([]);
@@ -66,13 +68,21 @@ function abrirEdicao(marcacao) {
 
 // Adicione esta nova função para reativar:
 async function reativarMarcacao(marcacao) {
-  if (!confirm(`Deseja reativar a marcação das ${formatarHora(marcacao.dataHoraLocal)}?`)) {
+  const confirmou = await showConfirm(
+    'Reativar Marcação',
+    `Deseja reativar a marcação das ${formatarHora(marcacao.dataHoraLocal)}?`
+  );
+  if (!confirmou) {
     return;
   }
 
-  const justificativaReativacao = prompt('Por favor, informe o motivo da reativação (obrigatório):');
+  const justificativaReativacao = await showPrompt(
+    'Reativar Marcação',
+    'Por favor, informe o motivo da reativação (obrigatório):',
+    'Digite o motivo da reativação...'
+  );
   if (!justificativaReativacao || !justificativaReativacao.trim()) {
-    alert('A reativação foi cancelada. A justificativa é obrigatória.');
+    showToast('A reativação foi cancelada. A justificativa é obrigatória.', 'info');
     return;
   }
 
@@ -93,10 +103,10 @@ async function reativarMarcacao(marcacao) {
     await putItem('marcacoes', JSON.parse(JSON.stringify(marcacaoReativada)));
 
     marcacoes.value = await getAllItems('marcacoes');
-    alert('Marcação reativada com sucesso!');
+    showToast('Marcação reativada com sucesso!', 'success');
   } catch (e) {
     console.error(e);
-    alert('Erro ao reativar marcação: ' + e.message);
+    showToast('Erro ao reativar marcação: ', 'error');
   }
 }
 
@@ -124,7 +134,7 @@ function atualizarNatureza() {
 
 async function salvarAjuste() {
   if (!justificativa.value.trim()) {
-    alert('A justificativa é obrigatória para ajustes.');
+    showToast('A justificativa é obrigatória para ajustes.', 'info');
     return;
   }
 
@@ -157,21 +167,31 @@ async function salvarAjuste() {
 
     marcacoes.value = await getAllItems('marcacoes');
     editando.value = false;
-    alert('Ajuste salvo com sucesso!');
+    showToast('Ajuste salvo com sucesso!', 'success');
   } catch (e) {
     console.error(e);
-    alert('Erro ao salvar ajuste: ' + e.message);
+    showToast('Erro ao salvar ajuste: ', 'error');
   }
 }
 
 async function anularMarcacao(marcacao) {
-  if (!confirm(`Deseja realmente excluir a marcação das ${formatarHora(marcacao.dataHoraLocal)}?`)) {
+  const confirmou = await showConfirm(
+    'Anular Marcação',
+    `Deseja realmente excluir a marcação das ${formatarHora(marcacao.dataHoraLocal)}?`
+  );
+  if (!confirmou) {
     return;
   }
 
-  const justificativaAnulacao = prompt('Por favor, informe o motivo da exclusão (obrigatório):');
+
+  const justificativaAnulacao = await showPrompt(
+    'Anular Marcação',
+    'Por favor, informe o motivo da exclusão (obrigatório):',
+    'Digite o motivo da exclusão...'
+  );
+  
   if (!justificativaAnulacao || !justificativaAnulacao.trim()) {
-    alert('A exclusão foi cancelada. A justificativa é obrigatória.');
+    showToast('A exclusão foi cancelada. A justificativa é obrigatória.', 'info');
     return;
   }
 
@@ -190,20 +210,22 @@ async function anularMarcacao(marcacao) {
     await putItem('marcacoes', JSON.parse(JSON.stringify(marcacaoAnulada)));
 
     marcacoes.value = await getAllItems('marcacoes');
-    alert('Marcação anulada com sucesso!');
+    showToast('Marcação anulada com sucesso!', 'success');
   } catch (e) {
     console.error(e);
-    alert('Erro ao anular marcação: ' + e.message);
+    showToast('Erro ao anular marcação: ', 'error');
   }
 }
 </script>
 
 <template>
+
+  <header class="app-header">
+    <h1>Tratamento de Ponto</h1>
+    <p>Corrija erros, adicione marcações ou audite</p>
+  </header>
+
   <div class="page-container">
-    <header>
-      <h1 class="page-title">Tratamento de Ponto</h1>
-      <p class="page-subtitle">Corrija erros, adicione marcações ou audite</p>
-    </header>
 
     <!-- Filtro de Colaborador -->
     <div class="card filter-card no-print" v-if="!editando">

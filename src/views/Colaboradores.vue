@@ -3,6 +3,7 @@
 import { ref, onMounted } from 'vue';
 import { getAllItems, addItem, putItem } from '../infrastructure/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { showToast, showConfirm } from '../application/NotificationService.js';
 
 const colaboradores = ref([]);
 const valoresHora = ref([]);
@@ -77,7 +78,8 @@ async function alternarStatus(colab) {
     ? `Desativar ${colab.nome}? Ele não aparecerá mais no registro de ponto, mas o histórico será mantido.`
     : `Reativar ${colab.nome}?`;
     
-  if (!confirm(msg)) return;
+    const confirmou = await showConfirm('Alterar Status', msg);
+  if (!confirmou) return;
 
   try {
     // Remove a propriedade virtual antes de salvar
@@ -86,8 +88,9 @@ async function alternarStatus(colab) {
     
     await putItem('colaboradores', JSON.parse(JSON.stringify(colabParaSalvar)));
     await carregarDados();
+    showToast('Status alterado com sucesso!', 'success');
   } catch (e) {
-    alert('Erro ao alterar status: ' + e);
+    showToast('Erro ao alterar status.', 'error');
   }
 }
 
@@ -95,7 +98,7 @@ async function salvarColaborador() {
   const dados = form.value;
 
   if (!dados.nome || !dados.valorHora) {
-    alert('Nome e Valor da Hora são obrigatórios.');
+    showToast('Nome e Valor da Hora são obrigatórios.', 'info');
     return;
   }
 
@@ -103,7 +106,7 @@ async function salvarColaborador() {
   const novoValorCentavos = Math.round(parseFloat(valorLimpo) * 100);
 
   if (isNaN(novoValorCentavos)) {
-    alert('Valor da hora inválido.');
+    showToast('Valor da hora inválido.', 'info');
     return;
   }
 
@@ -179,14 +182,13 @@ async function salvarColaborador() {
       await addItem('colaboradores', novoColab);
       await addItem('valoresHora', novoValorHora);
     }
-
-    alert('Colaborador salvo com sucesso!');
+    
     mostrarFormulario.value = false;
     await carregarDados(); 
-    
+    showToast('Colaborador salvo com sucesso!', 'success');
   } catch (e) {
     console.error(e);
-    alert('Erro ao salvar: ' + e.message);
+    showToast('Erro ao salvar: ' + e.message, 'error');
   }
 }
 
@@ -196,19 +198,19 @@ function formatarReal(centavos) {
 </script>
 
 <template>
+
+  <header class="app-header" style="display: flex; justify-content: space-between; align-items: center; text-align: left;">
+    <div>
+      <h1>Equipe</h1>
+      <p>Gestão de Colaboradores</p>
+    </div>
+    <button @click="abrirNovo" class="btn btn-primary" style="padding: 8px 16px; border-radius: 20px; font-size: 0.85rem;" v-if="!mostrarFormulario">
+      + Novo
+    </button>
+  </header>
+  
   <div class="page-container">
     
-    <!-- Cabeçalho -->
-    <header class="page-header">
-      <div>
-        <h1 class="page-title" style="text-align: left; margin-bottom: 0;">Equipe</h1>
-        <p class="page-subtitle" style="text-align: left; margin-bottom: 0;">Gestão de colaboradores</p>
-      </div>
-      <button @click="abrirNovo" class="btn btn-primary" v-if="!mostrarFormulario">
-        + Novo
-      </button>
-    </header>
-
     <!-- Formulário de Cadastro/Edição -->
     <div v-if="mostrarFormulario" class="card form-card">
       <h2 class="section-title">{{ editandoId ? 'Editar Colaborador' : 'Novo Colaborador' }}</h2>

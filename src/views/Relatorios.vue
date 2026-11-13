@@ -236,11 +236,13 @@ function toggleDia(data) {
 </script>
 
 <template>
+
+  <header class="no-print app-header">
+    <h1>Relatórios</h1>
+    <p>Espelhos de ponto, auditoria e pagamentos</p>
+  </header>  
+
   <div class="page-container">
-    <header class="no-print">
-      <h1 class="page-title">Relatórios</h1>
-      <p class="page-subtitle">Espelhos de ponto, auditoria e pagamentos</p>
-    </header>
 
     <!-- Filtros -->
     <div class="card filter-card no-print">
