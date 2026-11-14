@@ -50,7 +50,7 @@ function iniciarLeitor() {
 
 // Callback quando o QR Code é lido com sucesso
 async function onScanSuccess(decodedText, decodedResult) {
-    showToast("Texto Bruto:", +  decodedText, 'info');
+
     // Feedback visual imediato (pisca verde)
     statusLeitura.value = 'success';
 
@@ -67,7 +67,8 @@ async function onScanSuccess(decodedText, decodedResult) {
 
     // Para a câmera para não ficar lendo várias vezes
     if (html5QrcodeScanner) {
-      await html5QrcodeScanner.clear().catch(e => console.error(e));
+      html5QrcodeScanner.clear().catch(e => console.error(e));
+    //   await html5QrcodeScanner.clear().catch(e => console.error(e));
       html5QrcodeScanner = null;
     }
     leitorAtivo.value = false;
@@ -122,8 +123,15 @@ async function onScanSuccess(decodedText, decodedResult) {
   } catch (e) {
     console.error(e);
     statusLeitura.value = 'error';
-    showToast('QR Code inválido ou corrompido.', 'error');
-    setTimeout(() => { statusLeitura.value = 'idle'; }, 1000);
+    // showToast('QR Code inválido ou corrompido.', 'error');
+        // setTimeout(() => { statusLeitura.value = 'idle'; }, 1000);
+    // AQUI: Mostra o erro exato na tela do celular por 8 segundos
+    showToast('Erro: ' + (e.message || 'Falha ao ler QR Code'), 'error', false);
+    setTimeout(() => { 
+      statusLeitura.value = 'idle'; 
+      // Se o modal não abriu, reinicia a câmera para tentar de novo
+      if (!dadosRecebidos.value) iniciarLeitor();
+    }, 8000);    
   }
 }
 
