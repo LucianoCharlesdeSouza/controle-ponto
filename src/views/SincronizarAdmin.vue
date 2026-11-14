@@ -1,25 +1,29 @@
 <!-- src/views/SincronizarAdmin.vue -->
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { getAllItems, addItem } from '../infrastructure/database.js';
+import { getAllItems, addItem, putItem } from '../infrastructure/database.js';
 import { showToast, showConfirm } from '../application/NotificationService.js';
+import { descriptografarDados } from '../infrastructure/crypto-util.js';
+import { v4 as uuidv4 } from 'uuid'; // Se precisar criar um novo ID para o colaborador
 
 const leitorAtivo = ref(true);
 const dadosRecebidos = ref(null);
 const processando = ref(false);
+const statusLeitura = ref('idle'); // 'idle', 'success', 'error'
 let html5QrcodeScanner = null;
 
 // Função para iniciar a câmera
 function iniciarLeitor() {
   leitorAtivo.value = true;
   dadosRecebidos.value = null;
+    statusLeitura.value = 'idle';
   
   // Aguarda o DOM renderizar a div do leitor
   setTimeout(() => {
     html5QrcodeScanner = new Html5QrcodeScanner(
       "reader", 
-      { fps: 5, qrbox: { width: 250, height: 250 } },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
       /* verbose= */ false
     );
     html5QrcodeScanner.render(onScanSuccess, onScanFailure);
@@ -46,7 +50,14 @@ function iniciarLeitor() {
 
 // Callback quando o QR Code é lido com sucesso
 async function onScanSuccess(decodedText, decodedResult) {
-  try {
+
+    // Feedback visual imediato (pisca verde)
+    statusLeitura.value = 'success';
+
+    try {
+
+    // 1. Descriptografa o texto lido
+    const jsonString = await descriptografarDados(decodedText);        
     const pacote = JSON.parse(decodedText);
     
     if (pacote.app !== 'PontoFolha') {
@@ -56,12 +67,38 @@ async function onScanSuccess(decodedText, decodedResult) {
 
     // Para a câmera para não ficar lendo várias vezes
     if (html5QrcodeScanner) {
-      html5QrcodeScanner.clear().catch(e => console.error(e));
+      await html5QrcodeScanner.clear().catch(e => console.error(e));
       html5QrcodeScanner = null;
     }
     leitorAtivo.value = false;
 
-    // Pega os nomes dos motivos para exibir na tela
+    // 3. Verifica se o colaborador existe no banco do admin
+    const colaboradores = await getAllItems('colaboradores');
+    let colaboradorExistente = colaboradores.find(c => c.id === pacote.colaboradorId);   
+
+    // Se não existir, cria um novo colaborador com o ID do celular do colaborador
+    if (!colaboradorExistente) {
+      const novoColab = {
+        id: pacote.colaboradorId,
+        nome: pacote.colaboradorNome,
+        situacao: 'ativo',
+        dataAdmissao: new Date().toISOString().split('T')[0],
+        criadoEm: new Date().toISOString()
+      };
+      await addItem('colaboradores', novoColab);
+      // Cria um valor/hora zerado para não quebrar o sistema
+      await addItem('valoresHora', {
+        id: uuidv4(),
+        colaboradorId: pacote.colaboradorId,
+        valorCentavos: 0,
+        vigenciaInicio: new Date().toISOString().split('T')[0],
+        vigenciaFim: null
+      });
+      showToast(`Colaborador ${pacote.colaboradorNome} criado automaticamente!`, 'info');
+      colaboradorExistente = novoColab;
+    }
+
+    // 4. Prepara os dados para exibição
     const motivos = await getAllItems('motivos');
     const marcacoesFormatadas = pacote.marcacoes.map(m => {
       const motivo = motivos.find(mot => mot.id === m.motivoId);
@@ -79,8 +116,14 @@ async function onScanSuccess(decodedText, decodedResult) {
 
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
 
+    // Reseta o feedback visual após 1 segundo
+    setTimeout(() => { statusLeitura.value = 'idle'; }, 1000);
+        
   } catch (e) {
-    showToast('Erro ao ler o QR Code. Tente novamente.', 'error');
+    console.error(e);
+    statusLeitura.value = 'error';
+    showToast('QR Code inválido ou corrompido.', 'error');
+    setTimeout(() => { statusLeitura.value = 'idle'; }, 1000);
   }
 }
 
@@ -154,6 +197,8 @@ onUnmounted(() => {
 
     <!-- Área da Câmera -->
     <div v-if="leitorAtivo" class="card camera-card">
+      <!-- Overlay de Feedback -->
+      <div class="camera-feedback" :class="statusLeitura"></div>        
       <div id="reader" class="camera-reader"></div>
       <p class="camera-hint">Aponte a câmera para o QR Code gerado no celular do colaborador.</p>
     </div>
@@ -188,11 +233,32 @@ onUnmounted(() => {
 
 <style scoped>
 .camera-card {
+  position: relative;
   padding: 0;
   overflow: hidden;
   border-radius: var(--radius-lg);
   border: 2px dashed #cbd5e1;
   background: #f8fafc;
+}
+
+.camera-feedback {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; /* Não bloqueia cliques */
+  border: 4px solid transparent;
+  border-radius: var(--radius-lg);
+  transition: border-color 0.2s, background 0.2s;
+  z-index: 10;
+}
+
+.camera-feedback.success {
+  border-color: var(--color-success);
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.camera-feedback.error {
+  border-color: var(--color-danger);
+  background: rgba(239, 68, 68, 0.2);
 }
 
 .camera-reader {

@@ -5,6 +5,8 @@ import { getAllItems, addItem, putItem } from '../infrastructure/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
 import { showToast, showConfirm, showPrompt } from '../application/NotificationService.js';
+import { criptografarDados } from '../infrastructure/crypto-util.js';
+
 
 const abaAtiva = ref('ponto'); // 'ponto' ou 'sincronizar'
 const colaboradores = ref([]);
@@ -87,17 +89,15 @@ async function registrarPonto(motivo) {
 // --- LÓGICA DE GERAÇÃO DE QR CODE ---
 
 async function gerarQRCode() {
-  // Pega todas as marcações deste colaborador que ainda não foram sincronizadas
   const pendentes = todasMarcacoes.value.filter(
     m => m.colaboradorId === colaboradorSelecionadoId.value && !m.sincronizado
   );
 
   if (pendentes.length === 0) {
-    showToast('Nenhum ponto pendente de sincronização.', 'info');
+    showToast('Nenhum ponto pendente.', 'info');
     return;
   }
 
-  // Monta o pacote de dados
   const pacote = {
     app: 'PontoFolha',
     versao: 1,
@@ -112,18 +112,22 @@ async function gerarQRCode() {
     }))
   };
 
-  textoJson.value = JSON.stringify(pacote);
-
   try {
-    // Gera a imagem do QR Code
-    const url = await QRCode.toDataURL(textoJson.value, {
+    // Criptografa o JSON antes de gerar o QR Code
+    const jsonString = JSON.stringify(pacote);
+    const encryptedString = await criptografarDados(jsonString);
+    
+    // Gera o QR Code com a string criptografada
+    const url = await QRCode.toDataURL(encryptedString, {
       width: 600,
       margin: 2,
       color: { dark: '#1e293b', light: '#ffffff' }
     });
     qrCodeDataUrl.value = url;
+    textoJson.value = encryptedString; // Opcional: para debug
   } catch (err) {
-    showToast('Erro ao gerar QR Code.', 'error');
+    console.error(err);
+    showToast('Erro ao gerar QR Code seguro.', 'error');
   }
 }
 
