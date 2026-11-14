@@ -6,6 +6,8 @@ import Relatorios from '../views/Relatorios.vue'
 import Configuracoes from '../views/Configuracoes.vue'
 import AjustesPonto from '../views/AjustesPonto.vue'
 import Motivos from '../views/Motivos.vue'
+import PortalColaborador from '../views/PortalColaborador.vue'
+import SincronizarAdmin from '../views/SincronizarAdmin.vue'
 
 const router = createRouter({
   // history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -53,8 +55,18 @@ const router = createRouter({
       component: Motivos,
       meta: { title: 'Motivos' }
     },
-      
-
+    {
+      path: '/colaborador',
+      name: 'portal-colaborador',
+      component: PortalColaborador,
+      meta: { title: 'Meu Ponto' }
+    },      
+    {
+      path: '/sincronizar',
+      name: 'sincronizar',
+      component: SincronizarAdmin,
+      meta: { title: 'Sincronizar Pontos' }
+    },
 
   ],
 })

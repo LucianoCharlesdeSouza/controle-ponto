@@ -20,3 +20,9 @@ Exportar Relatório em CSV/Excel: Para o relatório anual, gerar um arquivo que 
 Criação Rápida de Motivo na Tela de Ponto: Conforme a especificação original, um botão de "+" na tela de bater ponto para criar um motivo na hora, sem precisar ir nas configurações.
 
 Dashboard Inicial: A tela de Ponto hoje é focada no colaborador. Poderíamos fazer a primeira tela mostrar um resumo do dia (quem já bateu ponto, quem está trabalhando agora, quem esqueceu de bater a saída).
+
+Avisos na Dashboard: Um card de alerta se alguém esqueceu de bater a saída no dia anterior.
+
+Geolocalização (GPS): Registrar a localização no momento do ponto (útil para auditoria).
+
+Limpeza de Logs Antigos: Como você falou de períodos, talvez uma ferramenta para "arquivar/excluir" apenas marcações de anos passados.

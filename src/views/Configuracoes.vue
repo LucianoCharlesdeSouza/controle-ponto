@@ -195,6 +195,18 @@ function formatarData(isoStr) {
         <div class="menu-arrow">→</div>
       </router-link>
     </div>
+    
+    <div class="card action-card">
+      <h2 class="section-title">🔄 Sincronização</h2>
+      <router-link to="/sincronizar" class="menu-link">
+        <div class="menu-icon">📷</div>
+        <div class="menu-text">
+          <strong>Receber Pontos via QR Code</strong>
+          <span>Leia o QR Code gerado no celular do colaborador</span>
+        </div>
+        <div class="menu-arrow">→</div>
+      </router-link>
+    </div>
 
     <div class="card">
       <h2 class="section-title">💾 Backup dos Dados</h2>
