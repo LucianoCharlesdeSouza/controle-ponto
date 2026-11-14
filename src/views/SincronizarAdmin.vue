@@ -58,7 +58,14 @@ async function onScanSuccess(decodedText, decodedResult) {
 
     // 1. Descriptografa o texto lido
         const jsonString = await descriptografarDados(decodedText);  
-    // 2. Verifica se realmente parece um JSON antes de tentar converter
+
+    // 2. LIMPEZA DA STRING (A MÁGICA ACONTECE AQUI)
+    // O .trim() remove espaços em branco nas pontas.
+    // O replace remove qualquer caractere de controle invisível que a câmera possa ter lido.
+    const jsonLimpo = jsonString.trim().replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+
+        // 3. Verifica se começa com { e termina com }
+            
     if (!jsonString.startsWith('{')) {
       throw new Error(`Falha na leitura. O texto recebido não é um JSON válido: ${jsonString.substring(0, 20)}...`);
         }  
