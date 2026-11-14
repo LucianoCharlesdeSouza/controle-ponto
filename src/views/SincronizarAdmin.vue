@@ -50,7 +50,7 @@ function iniciarLeitor() {
 
 // Callback quando o QR Code é lido com sucesso
 async function onScanSuccess(decodedText, decodedResult) {
-
+    showToast("Texto Bruto:", +  decodedText, 'info');
     // Feedback visual imediato (pisca verde)
     statusLeitura.value = 'success';
 
