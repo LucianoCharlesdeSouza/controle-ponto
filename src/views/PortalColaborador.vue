@@ -119,7 +119,7 @@ async function gerarQRCode() {
     
     // Gera o QR Code com a string criptografada
     const url = await QRCode.toDataURL(encryptedString, {
-      width: 600,
+      width: 1000,
       margin: 2,
       color: { dark: '#1e293b', light: '#ffffff' }
     });

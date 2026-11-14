@@ -78,13 +78,22 @@ export async function criptografarDados(dadosJson) {
 export async function descriptografarDados(base64String) {
   try {
     const key = await getCryptoKey();
-    const combinedBuffer = base64ToBuffer(base64String);
     
-    const iv = new Uint8Array(combinedBuffer.slice(0, 12));
-    const ciphertext = combinedBuffer.slice(12);
+    // Converte a string Base64 de volta para bytes de forma segura
+    const binaryString = window.atob(base64String);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Os primeiros 12 bytes são o IV (Vetor de Inicialização)
+    const iv = bytes.slice(0, 12);
+    // O restante é o texto criptografado
+    const ciphertext = bytes.slice(12);
     
     const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
+      { name: 'AES-GCM', iv: iv },
       key,
       ciphertext
     );
@@ -92,7 +101,8 @@ export async function descriptografarDados(base64String) {
     const dec = new TextDecoder();
     return dec.decode(decrypted);
   } catch (error) {
-    console.error('Falha na descriptografia. O QR Code pode estar corrompido ou a chave é diferente.', error);
-    throw new Error('Falha na descriptografia');
+    console.error('Falha na descriptografia:', error);
+    // Se falhar, lança um erro claro para o toast
+    throw new Error('Não foi possível descriptografar. O QR Code pode ser de uma versão antiga.');
   }
 }

@@ -57,7 +57,12 @@ async function onScanSuccess(decodedText, decodedResult) {
     try {
 
     // 1. Descriptografa o texto lido
-    const jsonString = await descriptografarDados(decodedText);        
+        const jsonString = await descriptografarDados(decodedText);  
+    // 2. Verifica se realmente parece um JSON antes de tentar converter
+    if (!jsonString.startsWith('{')) {
+      throw new Error(`Falha na leitura. O texto recebido não é um JSON válido: ${jsonString.substring(0, 20)}...`);
+        }  
+            
     const pacote = JSON.parse(decodedText);
     
     if (pacote.app !== 'PontoFolha') {
@@ -67,8 +72,8 @@ async function onScanSuccess(decodedText, decodedResult) {
 
     // Para a câmera para não ficar lendo várias vezes
     if (html5QrcodeScanner) {
-      html5QrcodeScanner.clear().catch(e => console.error(e));
-    //   await html5QrcodeScanner.clear().catch(e => console.error(e));
+    //   html5QrcodeScanner.clear().catch(e => console.error(e));
+      await html5QrcodeScanner.clear().catch(e => console.error(e));
       html5QrcodeScanner = null;
     }
     leitorAtivo.value = false;
