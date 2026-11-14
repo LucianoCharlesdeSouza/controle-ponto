@@ -66,11 +66,11 @@ async function onScanSuccess(decodedText, decodedResult) {
 
         // 3. Verifica se começa com { e termina com }
             
-    if (!jsonString.startsWith('{')) {
-      throw new Error(`Falha na leitura. O texto recebido não é um JSON válido: ${jsonString.substring(0, 20)}...`);
+    if (!jsonLimpo.startsWith('{')) {
+      throw new Error(`Falha na leitura. O texto recebido não é um JSON válido: ${jsonLimpo.substring(0, 20)}...`);
         }  
             
-    const pacote = JSON.parse(decodedText);
+    const pacote = JSON.parse(jsonLimpo);
     
     if (pacote.app !== 'PontoFolha') {
       showToast('QR Code inválido. Não é do Ponto & Folha.', 'error');
