@@ -24,6 +24,24 @@ function iniciarLeitor() {
     );
     html5QrcodeScanner.render(onScanSuccess, onScanFailure);
   }, 100);
+
+  setTimeout(async () => {
+    try {
+        if (html5QrcodeScanner) {
+        const capabilities = html5QrcodeScanner.getRunningTrackCapabilities();
+        const constraints = {
+            width: { ideal: 1000 },
+            frameRate: { ideal: capabilities.frameRate?.max || 30 },
+            ...(capabilities.zoom > 2 ? [{ zoom: 2.0 }] : []),
+            ...(capabilities.focusDistance ? [{ focusDistance: 1 }] : [])
+        };
+        await html5QrcodeScanner.applyVideoConstraints(constraints);
+        }
+    } catch (e) {
+        console.warn('Não foi possível ajustar câmera:', e);
+    }
+  }, 1500);
+
 }
 
 // Callback quando o QR Code é lido com sucesso
