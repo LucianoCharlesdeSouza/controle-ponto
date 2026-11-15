@@ -11,6 +11,8 @@ const leitorAtivo = ref(true);
 const dadosRecebidos = ref(null);
 const processando = ref(false);
 const statusLeitura = ref('idle'); // 'idle', 'success', 'error'
+const mensagemSucesso = ref('');
+
 let html5QrcodeScanner = null;
 
 // Função para iniciar a câmera
@@ -53,23 +55,14 @@ async function onScanSuccess(decodedText, decodedResult) {
 
     // Feedback visual imediato (pisca verde)
     statusLeitura.value = 'success';
+    mensagemSucesso.value = '';
+
 
     try {
 
     // 1. Descriptografa o texto lido
     const jsonString = await descriptografarDados(decodedText);  
-
-    // 2. LIMPEZA DA STRING (A MÁGICA ACONTECE AQUI)
-    // O .trim() remove espaços em branco nas pontas.
-    // O replace remove qualquer caractere de controle invisível que a câmera possa ter lido.
-    // const jsonLimpo = jsonString.trim().replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
-
-    //     // 3. Verifica se começa com { e termina com }
-            
-    // if (!jsonLimpo.startsWith('{')) {
-    //   throw new Error(`Falha na leitura. O texto recebido não é um JSON válido: ${jsonLimpo.substring(0, 20)}...`);
-    // }  
-            
+           
     const pacote = JSON.parse(jsonString);
     
     if (pacote.app !== 'PontoFolha') {
@@ -78,12 +71,13 @@ async function onScanSuccess(decodedText, decodedResult) {
     }
 
     // Para a câmera para não ficar lendo várias vezes
-    if (html5QrcodeScanner) {
-    //   html5QrcodeScanner.clear().catch(e => console.error(e));
-      await html5QrcodeScanner.clear().catch(e => console.error(e));
-      html5QrcodeScanner = null;
-    }
-    leitorAtivo.value = false;
+    // if (html5QrcodeScanner) {
+    // //   html5QrcodeScanner.clear().catch(e => console.error(e));
+    //   await html5QrcodeScanner.clear().catch(e => console.error(e));
+    //   html5QrcodeScanner = null;
+    // }
+
+    // leitorAtivo.value = false;
 
     // 3. Verifica se o colaborador existe no banco do admin
     const colaboradores = await getAllItems('colaboradores');
@@ -112,25 +106,67 @@ async function onScanSuccess(decodedText, decodedResult) {
     }
 
     // 4. Prepara os dados para exibição
-    const motivos = await getAllItems('motivos');
-    const marcacoesFormatadas = pacote.marcacoes.map(m => {
-      const motivo = motivos.find(mot => mot.id === m.motivoId);
-      return {
-        ...m,
-        motivoNome: motivo?.nome || 'Motivo desconhecido'
-      };
-    });
+    // const motivos = await getAllItems('motivos');
+    // const marcacoesFormatadas = pacote.marcacoes.map(m => {
+    //   const motivo = motivos.find(mot => mot.id === m.motivoId);
+    //   return {
+    //     ...m,
+    //     motivoNome: motivo?.nome || 'Motivo desconhecido'
+    //   };
+    // });
 
-    dadosRecebidos.value = {
-      colaboradorId: pacote.colaboradorId,
-      colaboradorNome: pacote.colaboradorNome,
-      marcacoes: marcacoesFormatadas.sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal))
-    };
+    // dadosRecebidos.value = {
+    //   colaboradorId: pacote.colaboradorId,
+    //   colaboradorNome: pacote.colaboradorNome,
+    //   marcacoes: marcacoesFormatadas.sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal))
+        // };
 
+    // 2. Importa as marcações deste QR Code (um dia)
+    const marcacoesExistentes = await getAllItems('marcacoes');
+    const idsExistentes = new Set(marcacoesExistentes.map(m => m.id));
+    let importados = 0;
+
+    for (const m of pacote.marcacoes) {
+      if (!idsExistentes.has(m.id)) {
+        await addItem('marcacoes', {
+          id: m.id,
+          colaboradorId: pacote.colaboradorId,
+          dataHoraLocal: m.dataHoraLocal,
+          motivoId: m.motivoId,
+          natureza: m.natureza,
+          origem: 'colaborador',
+          inconsistente: false,
+          sincronizado: true,
+          criadoEm: m.criadoEm || new Date().toISOString()
+        });
+        importados++;
+      }
+    }        
+
+    // if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+    // // Reseta o feedback visual após 1 segundo
+    // setTimeout(() => { statusLeitura.value = 'idle'; }, 1000);
+
+    // 3. Mostra o feedback e mantém a câmera ligada
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-
-    // Reseta o feedback visual após 1 segundo
+    
+    // Pisca verde
     setTimeout(() => { statusLeitura.value = 'idle'; }, 1000);
+
+    // Se for o último dia (paginação), para a câmera
+    if (pacote.paginacao && pacote.paginacao.atual === pacote.paginacao.total) {
+      if (html5QrcodeScanner) {
+        await html5QrcodeScanner.clear();
+        html5QrcodeScanner = null;
+      }
+      leitorAtivo.value = false;
+      showToast(`Sincronização concluída! ${importados} pontos importados no último dia.`, 'success');
+    } else {
+      // Se ainda tem dias, mostra a mensagem e continua lendo
+      showToast(`Dia ${pacote.paginacao?.atual} importado! Mostre o próximo QR Code.`, 'success', false);
+      setTimeout(() => { showToast('', 'info'); }, 4000);
+    }    
         
   } catch (e) {
     console.error(e);
@@ -142,8 +178,8 @@ async function onScanSuccess(decodedText, decodedResult) {
     setTimeout(() => { 
       statusLeitura.value = 'idle'; 
       // Se o modal não abriu, reinicia a câmera para tentar de novo
-      if (!dadosRecebidos.value) iniciarLeitor();
-    }, 8000);    
+    //   if (!dadosRecebidos.value) iniciarLeitor();
+    }, 2000);    
   }
 }
 
@@ -220,7 +256,10 @@ onUnmounted(() => {
       <!-- Overlay de Feedback -->
       <div class="camera-feedback" :class="statusLeitura"></div>        
       <div id="reader" class="camera-reader"></div>
-      <p class="camera-hint">Aponte a câmera para o QR Code gerado no celular do colaborador.</p>
+      <p class="camera-hint">
+        Aponte a câmera para o QR Code gerado no celular do colaborador.
+        O leitor permanece ativo para múltiplos dias.
+      </p>
     </div>
 
     <!-- Área de Revisão (Após a leitura) -->

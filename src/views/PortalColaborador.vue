@@ -20,6 +20,9 @@ const registrando = ref(false);
 const qrCodeDataUrl = ref('');
 const textoJson = ref('');
 
+const diasPendentes = ref([]);
+const indiceDiaAtual = ref(0);
+
 onMounted(async () => {
   const todosColab = await getAllItems('colaboradores');
   colaboradores.value = todosColab.filter(c => c.situacao === 'ativo').sort((a, b) => a.nome.localeCompare(b.nome));
@@ -52,6 +55,27 @@ async function carregarDados() {
   const todas = await getAllItems('marcacoes');
   todasMarcacoes.value = todas;
   marcacoesHoje.value = todas.filter(m => m.dataHoraLocal.startsWith(hojeStr));
+
+  // NOVO: Agrupar os pendentes por dia
+  const pendentes = todasMarcacoes.value.filter(
+    m => m.colaboradorId === colaboradorSelecionadoId.value && !m.sincronizado
+  );
+
+  const agrupados = {};
+  pendentes.forEach(m => {
+    const dia = m.dataHoraLocal.split('T')[0];
+    if (!agrupados[dia]) agrupados[dia] = [];
+    agrupados[dia].push(m);
+  });
+
+  // Ordena os dias do mais antigo para o mais novo
+  diasPendentes.value = Object.keys(agrupados).sort().map(dia => ({
+    data: dia,
+    marcacoes: agrupados[dia]
+  }));
+  
+  indiceDiaAtual.value = 0;
+  qrCodeDataUrl.value = '';  
 }
 
 async function registrarPonto(motivo) {
@@ -88,22 +112,66 @@ async function registrarPonto(motivo) {
 
 // --- LÓGICA DE GERAÇÃO DE QR CODE ---
 
-async function gerarQRCode() {
-  const pendentes = todasMarcacoes.value.filter(
-    m => m.colaboradorId === colaboradorSelecionadoId.value && !m.sincronizado
-  );
+// async function gerarQRCode() {
+//   const pendentes = todasMarcacoes.value.filter(
+//     m => m.colaboradorId === colaboradorSelecionadoId.value && !m.sincronizado
+//   );
 
-  if (pendentes.length === 0) {
+//   if (pendentes.length === 0) {
+//     showToast('Nenhum ponto pendente.', 'info');
+//     return;
+//   }
+
+//   const pacote = {
+//     app: 'PontoFolha',
+//     versao: 1,
+//     colaboradorId: colaboradorSelecionadoId.value,
+//     colaboradorNome: colaboradorAtualNome.value,
+//     marcacoes: pendentes.map(m => ({
+//       id: m.id,
+//       dataHoraLocal: m.dataHoraLocal,
+//       motivoId: m.motivoId,
+//       natureza: m.natureza,
+//       criadoEm: m.criadoEm
+//     }))
+//   };
+
+//   try {
+
+//     const jsonString = JSON.stringify(pacote);
+//     const encryptedString = await criptografarDados(jsonString);
+
+//     const url = await QRCode.toDataURL(encryptedString, {
+//       width: 600,
+//       margin: 2,
+//       color: { dark: '#1e293b', light: '#ffffff' },
+//     });
+//     qrCodeDataUrl.value = url;
+//     textoJson.value = encryptedString; 
+//   } catch (err) {
+//     console.error(err);
+//     showToast('Erro ao gerar QR Code seguro.', 'error');
+//   }
+// }
+
+async function gerarQRCode() {
+  if (diasPendentes.value.length === 0) {
     showToast('Nenhum ponto pendente.', 'info');
     return;
   }
 
+  const diaParaEnviar = diasPendentes.value[indiceDiaAtual.value];
+  
   const pacote = {
     app: 'PontoFolha',
     versao: 1,
     colaboradorId: colaboradorSelecionadoId.value,
     colaboradorNome: colaboradorAtualNome.value,
-    marcacoes: pendentes.map(m => ({
+    paginacao: {
+      atual: indiceDiaAtual.value + 1,
+      total: diasPendentes.value.length
+    },
+    marcacoes: diaParaEnviar.marcacoes.map(m => ({
       id: m.id,
       dataHoraLocal: m.dataHoraLocal,
       motivoId: m.motivoId,
@@ -112,41 +180,40 @@ async function gerarQRCode() {
     }))
   };
 
-//     console.table({
-//   tamanhoBase64: encryptedString.length,
-//   tamanhoBytes: new TextEncoder().encode(encryptedString).length,
-//   tamanhoJsonOriginal: new TextEncoder().encode(jsonString).length,
-//   limiteAproximadoH: 1273
-//     });
   try {
-    // Criptografa o JSON antes de gerar o QR Code
-
-    
-
     const jsonString = JSON.stringify(pacote);
     const encryptedString = await criptografarDados(jsonString);
-
-    // Gera o QR Code com a string criptografada
-    //   const payload = JSON.stringify({
-    //         app: 'PontoFolha',
-    //         versao: 1,
-    //         colaboradorId: colaboradorSelecionadoId.value,
-    //         colaboradorNome: colaboradorAtualNome.value,
-    //   })
-
-    // const encryptedString = await criptografarDados(payload);
+    
+    // QR Code com nível H (High) para garantir leitura mesmo com a tela um pouco suja/refletindo
     const url = await QRCode.toDataURL(encryptedString, {
-      width: 600,
-      margin: 2,
+      width: 800,
+      margin: 1,
       color: { dark: '#1e293b', light: '#ffffff' },
-    //   errorCorrectionLevel: 'H' // Máxima correção de erros
+    //   errorCorrectionLevel: 'H'
     });
     qrCodeDataUrl.value = url;
-    textoJson.value = encryptedString; // Opcional: para debug
-    // textoJson.value = encryptedString; // Opcional: para debug
   } catch (err) {
-    console.error(err);
-    showToast('Erro ao gerar QR Code seguro.', 'error');
+    showToast('Erro ao gerar QR Code.', 'error');
+  }
+}
+
+// Avança para o próximo dia
+function proximoDia() {
+  if (indiceDiaAtual.value < diasPendentes.value.length - 1) {
+    indiceDiaAtual.value++;
+    qrCodeDataUrl.value = '';
+    // Opcional: gerar automaticamente o próximo
+    // gerarQRCode(); 
+  } else {
+    showToast('Este é o último dia pendente.', 'info');
+  }
+}
+
+// Volta para o dia anterior
+function diaAnterior() {
+  if (indiceDiaAtual.value > 0) {
+    indiceDiaAtual.value--;
+    qrCodeDataUrl.value = '';
   }
 }
 
@@ -237,7 +304,7 @@ async function confirmarSincronizacao() {
     </div>
 
     <!-- ABA SINCRONIZAR -->
-    <div v-if="abaAtiva === 'sincronizar'">
+    <!-- <div v-if="abaAtiva === 'sincronizar'">
       <div class="card text-center">
         <p class="desc">Envie seus pontos para o administrador de forma offline. Basta gerar o código abaixo e mostrar a tela do seu celular para ele ler.</p>
         
@@ -257,8 +324,50 @@ async function confirmarSincronizacao() {
           </button>
         </div>
       </div>
-    </div>
+    </div> -->
+    <!-- ABA SINCRONIZAR -->
+    <div v-if="abaAtiva === 'sincronizar'">
+      <div class="card text-center" v-if="diasPendentes.length > 0">
+        
+        <!-- Navegação entre dias -->
+        <div class="pagination-header" v-if="diasPendentes.length > 1">
+          <button @click="diaAnterior" :disabled="indiceDiaAtual === 0" class="btn-page">◀</button>
+          <span class="page-indicator">
+            Dia {{ indiceDiaAtual + 1 }} de {{ diasPendentes.length }}
+            <br>
+            <small>{{ diasPendentes[indiceDiaAtual].data.split('-').reverse().join('/') }}</small>
+          </span>
+          <button @click="proximoDia" :disabled="indiceDiaAtual === diasPendentes.length - 1" class="btn-page">▶</button>
+        </div>
 
+        <p class="desc" v-if="!qrCodeDataUrl">Mostre o QR Code do dia <strong>{{ diasPendentes[indiceDiaAtual].data.split('-').reverse().join('/') }}</strong> para o administrador.</p>
+        
+        <button v-if="!qrCodeDataUrl" @click="gerarQRCode" class="btn btn-primary btn-block" style="margin-top: 20px;">
+          🔄 Gerar QR Code ({{ diasPendentes[indiceDiaAtual].marcacoes.length }} pontos)
+        </button>
+
+        <div v-if="qrCodeDataUrl" class="qr-area">
+          <img :src="qrCodeDataUrl" alt="QR Code" class="qr-image" />
+          <p class="qr-hint">Aponte a câmera do administrador aqui.</p>
+          
+          <div class="qr-actions">
+            <button v-if="indiceDiaAtual < diasPendentes.length - 1" @click="proximoDia(); qrCodeDataUrl=''" class="btn btn-primary btn-block">
+              Próximo Dia ▶
+            </button>
+            <button v-else @click="confirmarSincronizacao" class="btn btn-success btn-block">
+              ✅ Finalizar Envio
+            </button>
+            <button @click="qrCodeDataUrl = ''" class="btn btn-outline btn-block" style="margin-top: 8px;">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div v-else class="card text-center">
+        <p class="desc">Nenhum ponto pendente de sincronização.</p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -335,4 +444,33 @@ async function confirmarSincronizacao() {
 .qr-hint { font-size: 0.85rem; color: var(--color-muted); margin-top: 12px; font-weight: 600; }
 
 .empty-state { text-align: center; padding: 20px; color: var(--color-muted); }
+
+.pagination-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f1f5f9;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+}
+.page-indicator {
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+.page-indicator small { color: var(--color-muted); font-weight: 500; }
+.btn-page {
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+.btn-page:disabled { opacity: 0.3; }
 </style>
