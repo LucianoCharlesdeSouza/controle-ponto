@@ -112,31 +112,38 @@ async function gerarQRCode() {
     }))
   };
 
-    const jsonString = JSON.stringify(pacote);
-    const encryptedString = await criptografarDados(jsonString);
-
-    console.table({
-  tamanhoBase64: encryptedString.length,
-  tamanhoBytes: new TextEncoder().encode(encryptedString).length,
-  tamanhoJsonOriginal: new TextEncoder().encode(jsonString).length,
-  limiteAproximadoH: 1273
-    });
+//     console.table({
+//   tamanhoBase64: encryptedString.length,
+//   tamanhoBytes: new TextEncoder().encode(encryptedString).length,
+//   tamanhoJsonOriginal: new TextEncoder().encode(jsonString).length,
+//   limiteAproximadoH: 1273
+//     });
   try {
     // Criptografa o JSON antes de gerar o QR Code
 
     
 
-
+    const jsonString = JSON.stringify(pacote);
+    const encryptedString = await criptografarDados(jsonString);
 
     // Gera o QR Code com a string criptografada
+    //   const payload = JSON.stringify({
+    //         app: 'PontoFolha',
+    //         versao: 1,
+    //         colaboradorId: colaboradorSelecionadoId.value,
+    //         colaboradorNome: colaboradorAtualNome.value,
+    //   })
+
+    // const encryptedString = await criptografarDados(payload);
     const url = await QRCode.toDataURL(encryptedString, {
-      width: 1000,
+      width: 600,
       margin: 2,
       color: { dark: '#1e293b', light: '#ffffff' },
-      errorCorrectionLevel: 'H' // Máxima correção de erros
+    //   errorCorrectionLevel: 'H' // Máxima correção de erros
     });
     qrCodeDataUrl.value = url;
     textoJson.value = encryptedString; // Opcional: para debug
+    // textoJson.value = encryptedString; // Opcional: para debug
   } catch (err) {
     console.error(err);
     showToast('Erro ao gerar QR Code seguro.', 'error');

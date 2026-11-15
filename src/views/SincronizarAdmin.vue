@@ -57,20 +57,20 @@ async function onScanSuccess(decodedText, decodedResult) {
     try {
 
     // 1. Descriptografa o texto lido
-        const jsonString = await descriptografarDados(decodedText);  
+    const jsonString = await descriptografarDados(decodedText);  
 
     // 2. LIMPEZA DA STRING (A MÁGICA ACONTECE AQUI)
     // O .trim() remove espaços em branco nas pontas.
     // O replace remove qualquer caractere de controle invisível que a câmera possa ter lido.
-    const jsonLimpo = jsonString.trim().replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+    // const jsonLimpo = jsonString.trim().replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
 
-        // 3. Verifica se começa com { e termina com }
+    //     // 3. Verifica se começa com { e termina com }
             
-    if (!jsonLimpo.startsWith('{')) {
-      throw new Error(`Falha na leitura. O texto recebido não é um JSON válido: ${jsonLimpo.substring(0, 20)}...`);
-        }  
+    // if (!jsonLimpo.startsWith('{')) {
+    //   throw new Error(`Falha na leitura. O texto recebido não é um JSON válido: ${jsonLimpo.substring(0, 20)}...`);
+    // }  
             
-    const pacote = JSON.parse(jsonLimpo);
+    const pacote = JSON.parse(jsonString);
     
     if (pacote.app !== 'PontoFolha') {
       showToast('QR Code inválido. Não é do Ponto & Folha.', 'error');
