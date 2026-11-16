@@ -74,7 +74,15 @@ const router = createRouter({
       name: 'gerar-qrcodes',
       component: GerarQRCodes,
       meta: { title: 'Configurar Celular' }
-    }    
+    },
+    {
+      path: '/app-a',
+      component: () => import('@/webrtc-sync/pages/AppA.vue'),
+    },
+    {
+      path: '/app-b',
+      component: () => import('@/webrtc-sync/pages/AppB.vue'),
+    },    
 
 
   ],

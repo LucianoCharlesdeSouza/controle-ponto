@@ -162,7 +162,7 @@ async function zerarBanco() {
     }
 
     showToast('Base de dados zerada com sucesso!', 'success');
-    // setTimeout(() => window.location.reload(), 2000);
+    setTimeout(() => window.location.reload(), 2000);
   } catch (e) {
     showToast('Erro ao zerar base: ' + e.message, 'error');
     importando.value = false;
