@@ -205,7 +205,7 @@ function formatarData(isoStr) {
       </router-link>      
     </div>
 
-    <div class="card action-card">
+    <!-- <div class="card action-card">
       <h2 class="section-title">🔄 QR Codes Motivos e Colaborador</h2>
       <router-link to="/gerar-qrcodes" class="menu-link">
         <div class="menu-icon">📷</div>
@@ -215,7 +215,7 @@ function formatarData(isoStr) {
         </div>
         <div class="menu-arrow">→</div>
       </router-link>
-    </div>
+    </div> -->
     
     <div class="card action-card">
       <h2 class="section-title">🔄 Sincronização</h2>

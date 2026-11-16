@@ -321,7 +321,8 @@ async function confirmarSincronizacao() {
     </div>      
       
     <!-- APP NORMAL (APÓS CONFIGURADO) -->
-    <div v-else>      
+    <div v-else>   
+      {{ isConfigurado }}   
       <div class="tabs-container">
         <button :class="{ active: abaAtiva === 'ponto' }" @click="abaAtiva = 'ponto'">Bater Ponto</button>
         <button :class="{ active: abaAtiva === 'sincronizar' }" @click="abaAtiva = 'sincronizar'">Sincronizar</button>
