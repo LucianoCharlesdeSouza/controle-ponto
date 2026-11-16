@@ -1,21 +1,24 @@
 <!-- src/views/PortalColaborador.vue -->
 <script setup>
 import { ref, onMounted, computed } from 'vue';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { getAllItems, addItem, putItem } from '../infrastructure/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
 import { showToast, showConfirm, showPrompt } from '../application/NotificationService.js';
 import { criptografarDados } from '../infrastructure/crypto-util.js';
 
+const isConfigurado = ref(false);
+const configurando = ref(false); // Se true, mostra a câmera
 
 const abaAtiva = ref('ponto'); // 'ponto' ou 'sincronizar'
-const colaboradores = ref([]);
+// const colaboradores = ref([]);
+const colaborador = ref(null); // Agora é um objeto, não um array de colaboradores
 const motivos = ref([]);
-const colaboradorSelecionadoId = ref('');
+// const colaboradorSelecionadoId = ref('');
 const marcacoesHoje = ref([]);
 const todasMarcacoes = ref([]);
 const registrando = ref(false);
-
 // Dados do QR Code
 const qrCodeDataUrl = ref('');
 const textoJson = ref('');
@@ -23,28 +26,107 @@ const textoJson = ref('');
 const diasPendentes = ref([]);
 const indiceDiaAtual = ref(0);
 
+let html5QrcodeScanner = null;
+
 onMounted(async () => {
-  const todosColab = await getAllItems('colaboradores');
-  colaboradores.value = todosColab.filter(c => c.situacao === 'ativo').sort((a, b) => a.nome.localeCompare(b.nome));
-  
-  motivos.value = (await getAllItems('motivos')).filter(m => m.ativo !== false).sort((a, b) => a.ordem - b.ordem);
-  
-  if (colaboradores.value.length > 0) {
-    colaboradorSelecionadoId.value = colaboradores.value[0].id;
-  }
-  
-  await carregarDados();
+  // const todosColab = await getAllItems('colaboradores');
+  // colaboradores.value = todosColab.filter(c => c.situacao === 'ativo').sort((a, b) => a.nome.localeCompare(b.nome));
+
+  // motivos.value = (await getAllItems('motivos')).filter(m => m.ativo !== false).sort((a, b) => a.ordem - b.ordem);
+
+  // if (colaboradores.value.length > 0) {
+  //   colaboradorSelecionadoId.value = colaboradores.value[0].id;
+  // }
+
+  // await carregarDados();
+  await verificarConfiguracao();
 });
+
+async function verificarConfiguracao() {
+  const config = await getAllItems('settings');
+  const colaboradorSalvo = config.find(c => c.key === 'colaborador_configurado');
+  const motivosSalvos = await getAllItems('motivos');
+
+  if (colaboradorSalvo && colaboradorSalvo.value && motivosSalvos.length > 0) {
+    colaborador.value = colaboradorSalvo.value;
+    motivos.value = motivosSalvos.sort((a, b) => a.ordem - b.ordem);
+    isConfigurado.value = true;
+    await carregarDados();
+  } else {
+    isConfigurado.value = false;
+  }
+}
+
+// --- LEITOR DE CONFIGURAÇÃO INICIAL ---
+function iniciarConfiguracao() {
+  configurando.value = true;
+  
+  setTimeout(() => {
+    html5QrcodeScanner = new Html5QrcodeScanner(
+      "reader-config", 
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      false
+    );
+    html5QrcodeScanner.render(onConfigScanSuccess, () => {});
+  }, 100);
+}
+
+async function onConfigScanSuccess(decodedText, decodedResult) {
+  try {
+    const pacote = JSON.parse(decodedText);
+    if (pacote.app !== 'PontoFolha') throw new Error('QR Code inválido');
+
+    // 1. Se for o QR de Motivos
+    if (pacote.tipo === 'config_motivos') {
+      for (const m of pacote.motivos) {
+        await putItem('motivos', m); // Salva os motivos com os mesmos IDs
+      }
+      showToast('Motivos configurados! Agora leia o seu QR Code.', 'success');
+    }
+    
+    // 2. Se for o QR do Colaborador
+    else if (pacote.tipo === 'colaborador') {
+      const colabConfig = pacote.colaborador;
+      
+      // Salva o colaborador no banco local
+      await putItem('colaboradores', {
+        ...colabConfig,
+        situacao: 'ativo',
+        criadoEm: new Date().toISOString()
+      });
+
+      // Salva o valor/hora
+      await putItem('valoresHora', {
+        id: uuidv4(),
+        colaboradorId: colabConfig.id,
+        valorCentavos: pacote.valorHoraCentavos,
+        vigenciaInicio: new Date().toISOString().split('T')[0],
+        vigenciaFim: null
+      });
+
+      // Salva nas configurações que ele está pronto
+      await putItem('settings', { key: 'colaborador_configurado', value: colabConfig });
+      
+      showToast('Colaborador configurado com sucesso!', 'success');
+      
+      if (html5QrcodeScanner) await html5QrcodeScanner.clear();
+      configurando.value = false;
+      await verificarConfiguracao();
+    }
+  } catch (e) {
+    showToast('QR Code inválido.', 'error');
+  }
+}
 
 const dataAtual = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
 
 const colaboradorAtualNome = computed(() => {
-  return colaboradores.value.find(c => c.id === colaboradorSelecionadoId.value)?.nome || 'Selecione';
+  return colaboradores.value.find(c => c.id === colaborador.value.id)?.nome || 'Selecione';
 });
 
 const minhasMarcacoesHoje = computed(() => {
   return marcacoesHoje.value
-    .filter(m => m.colaboradorId === colaboradorSelecionadoId.value)
+    .filter(m => m.colaboradorId === colaborador.value.id)
     .sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal));
 });
 
@@ -58,7 +140,7 @@ async function carregarDados() {
 
   // NOVO: Agrupar os pendentes por dia
   const pendentes = todasMarcacoes.value.filter(
-    m => m.colaboradorId === colaboradorSelecionadoId.value && !m.sincronizado
+    m => m.colaboradorId === colaborador.value.id && !m.sincronizado
   );
 
   const agrupados = {};
@@ -79,7 +161,7 @@ async function carregarDados() {
 }
 
 async function registrarPonto(motivo) {
-  if (!colaboradorSelecionadoId.value || registrando.value) return;
+  if (!colaborador.value.id || registrando.value) return;
   registrando.value = true;
 
   const agora = new Date();
@@ -88,7 +170,7 @@ async function registrarPonto(motivo) {
 
   const novaMarcacao = {
     id: uuidv4(),
-    colaboradorId: colaboradorSelecionadoId.value,
+    colaboradorId: colaborador.value.id,
     dataHoraLocal: dataHoraLocal,
     motivoId: motivo.id,
     natureza: motivo.natureza,
@@ -112,48 +194,6 @@ async function registrarPonto(motivo) {
 
 // --- LÓGICA DE GERAÇÃO DE QR CODE ---
 
-// async function gerarQRCode() {
-//   const pendentes = todasMarcacoes.value.filter(
-//     m => m.colaboradorId === colaboradorSelecionadoId.value && !m.sincronizado
-//   );
-
-//   if (pendentes.length === 0) {
-//     showToast('Nenhum ponto pendente.', 'info');
-//     return;
-//   }
-
-//   const pacote = {
-//     app: 'PontoFolha',
-//     versao: 1,
-//     colaboradorId: colaboradorSelecionadoId.value,
-//     colaboradorNome: colaboradorAtualNome.value,
-//     marcacoes: pendentes.map(m => ({
-//       id: m.id,
-//       dataHoraLocal: m.dataHoraLocal,
-//       motivoId: m.motivoId,
-//       natureza: m.natureza,
-//       criadoEm: m.criadoEm
-//     }))
-//   };
-
-//   try {
-
-//     const jsonString = JSON.stringify(pacote);
-//     const encryptedString = await criptografarDados(jsonString);
-
-//     const url = await QRCode.toDataURL(encryptedString, {
-//       width: 600,
-//       margin: 2,
-//       color: { dark: '#1e293b', light: '#ffffff' },
-//     });
-//     qrCodeDataUrl.value = url;
-//     textoJson.value = encryptedString; 
-//   } catch (err) {
-//     console.error(err);
-//     showToast('Erro ao gerar QR Code seguro.', 'error');
-//   }
-// }
-
 async function gerarQRCode() {
   if (diasPendentes.value.length === 0) {
     showToast('Nenhum ponto pendente.', 'info');
@@ -165,7 +205,7 @@ async function gerarQRCode() {
   const pacote = {
     app: 'PontoFolha',
     versao: 1,
-    colaboradorId: colaboradorSelecionadoId.value,
+    colaboradorId: colaborador.value.id,
     colaboradorNome: colaboradorAtualNome.value,
     paginacao: {
       atual: indiceDiaAtual.value + 1,
@@ -227,7 +267,7 @@ async function confirmarSincronizacao() {
 
   try {
     const pendentes = todasMarcacoes.value.filter(
-      m => m.colaboradorId === colaboradorSelecionadoId.value && !m.sincronizado
+      m => m.colaboradorId === colaborador.value.id && !m.sincronizado
     );
 
     for (const m of pendentes) {
@@ -246,128 +286,131 @@ async function confirmarSincronizacao() {
 
 <template>
   <div class="page-container">
-    <header class="app-header">
+    <!-- <header class="app-header">
       <h1>Portal do Colaborador</h1>
       <p>{{ dataAtual }}</p>
-    </header>
+    </header> -->
 
-    <div class="card filter-card">
+    <!-- <div class="card filter-card">
       <label class="form-label">Quem é você?</label>
       <select v-model="colaboradorSelecionadoId" class="form-select">
         <option v-for="c in colaboradores" :key="c.id" :value="c.id">{{ c.nome }}</option>
       </select>
-    </div>
-
-    <div class="tabs-container">
-      <button :class="{ active: abaAtiva === 'ponto' }" @click="abaAtiva = 'ponto'">Bater Ponto</button>
-      <button :class="{ active: abaAtiva === 'sincronizar' }" @click="abaAtiva = 'sincronizar'">Sincronizar</button>
-    </div>
-
-    <!-- ABA BATER PONTO -->
-    <div v-if="abaAtiva === 'ponto'">
-      <div class="status-panel card">
-        <div class="status-content">
-          <div class="status-info">
-            <span class="status-name">{{ colaboradorAtualNome }}</span>
-            <span class="status-label">Total de hoje</span>
-          </div>
-          <div class="status-time">
-            {{ minhasMarcacoesHoje.length }} pontos
-          </div>
-        </div>
-      </div>
-
-      <div class="actions-grid">
-        <button 
-          v-for="motivo in motivos" 
-          :key="motivo.id"
-          @click="registrarPonto(motivo)"
-          class="btn-action"
-          :class="motivo.natureza === 'trabalho' ? 'btn-entrada' : 'btn-pausa'"
-          :disabled="registrando"
-        >
-          <span class="action-icon">{{ motivo.natureza === 'trabalho' ? '▶️' : '⏸️' }}</span>
-          <span class="action-text">{{ motivo.nome }}</span>
-        </button>
-      </div>
-
-      <div class="card">
-        <h2 class="section-title">Histórico de Hoje</h2>
-        <ul v-if="minhasMarcacoesHoje.length > 0" class="history-list">
-          <li v-for="marc in minhasMarcacoesHoje" :key="marc.id">
-            <div class="history-time">{{ new Date(marc.dataHoraLocal).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}</div>
-            <div class="history-motivo" :class="marc.natureza">{{ motivos.find(m => m.id === marc.motivoId)?.nome }}</div>
-          </li>
-        </ul>
-        <p v-else class="empty-state">Nenhuma marcação registrada hoje.</p>
-      </div>
-    </div>
-
-    <!-- ABA SINCRONIZAR -->
-    <!-- <div v-if="abaAtiva === 'sincronizar'">
-      <div class="card text-center">
-        <p class="desc">Envie seus pontos para o administrador de forma offline. Basta gerar o código abaixo e mostrar a tela do seu celular para ele ler.</p>
-        
-        <button v-if="!qrCodeDataUrl" @click="gerarQRCode" class="btn btn-primary btn-block" style="margin-top: 20px;">
-          🔄 Gerar QR Code de Ponto
-        </button>
-
-        <div v-if="qrCodeDataUrl" class="qr-area">
-          <img :src="qrCodeDataUrl" alt="QR Code" class="qr-image" />
-          <p class="qr-hint">Mostre esta tela para o administrador.</p>
-          
-          <button @click="confirmarSincronizacao" class="btn btn-success btn-block" style="margin-top: 24px;">
-            ✅ Já fui Sincronizado
-          </button>
-          <button @click="qrCodeDataUrl = ''" class="btn btn-outline btn-block" style="margin-top: 12px;">
-            Cancelar
-          </button>
-        </div>
-      </div>
     </div> -->
-    <!-- ABA SINCRONIZAR -->
-    <div v-if="abaAtiva === 'sincronizar'">
-      <div class="card text-center" v-if="diasPendentes.length > 0">
-        
-        <!-- Navegação entre dias -->
-        <div class="pagination-header" v-if="diasPendentes.length > 1">
-          <button @click="diaAnterior" :disabled="indiceDiaAtual === 0" class="btn-page">◀</button>
-          <span class="page-indicator">
-            Dia {{ indiceDiaAtual + 1 }} de {{ diasPendentes.length }}
-            <br>
-            <small>{{ diasPendentes[indiceDiaAtual].data.split('-').reverse().join('/') }}</small>
-          </span>
-          <button @click="proximoDia" :disabled="indiceDiaAtual === diasPendentes.length - 1" class="btn-page">▶</button>
-        </div>
 
-        <p class="desc" v-if="!qrCodeDataUrl">Mostre o QR Code do dia <strong>{{ diasPendentes[indiceDiaAtual].data.split('-').reverse().join('/') }}</strong> para o administrador.</p>
-        
-        <button v-if="!qrCodeDataUrl" @click="gerarQRCode" class="btn btn-primary btn-block" style="margin-top: 20px;">
-          🔄 Gerar QR Code ({{ diasPendentes[indiceDiaAtual].marcacoes.length }} pontos)
+    <div v-if="!isConfigurado" class="config-screen">
+      <header class="app-header">
+        <h1>Bem-vindo!</h1>
+        <p>Configure seu aplicativo</p>
+      </header>
+
+      <div v-if="!configurando" class="card text-center">
+        <div class="icon-large">📲</div>
+        <h2>Configuração Inicial</h2>
+        <p class="desc">Para começar, você precisa ler dois QR Codes gerados pelo administrador: um com os motivos de ponto e outro com seus dados.</p>
+        <button @click="iniciarConfiguracao" class="btn btn-primary btn-block" style="margin-top: 20px;">
+          📷 Abrir Câmera
         </button>
+      </div>
 
-        <div v-if="qrCodeDataUrl" class="qr-area">
-          <img :src="qrCodeDataUrl" alt="QR Code" class="qr-image" />
-          <p class="qr-hint">Aponte a câmera do administrador aqui.</p>
-          
-          <div class="qr-actions">
-            <button v-if="indiceDiaAtual < diasPendentes.length - 1" @click="proximoDia(); qrCodeDataUrl=''" class="btn btn-primary btn-block">
-              Próximo Dia ▶
-            </button>
-            <button v-else @click="confirmarSincronizacao" class="btn btn-success btn-block">
-              ✅ Finalizar Envio
-            </button>
-            <button @click="qrCodeDataUrl = ''" class="btn btn-outline btn-block" style="margin-top: 8px;">
-              Cancelar
-            </button>
+      <div v-if="configurando" class="card camera-card">
+        <div id="reader-config" class="camera-reader"></div>
+        <p class="camera-hint">Aponte para o QR Code de Motivos (1) e depois para o seu QR Code (2).</p>
+        <button @click="configurando = false" class="btn btn-outline btn-block" style="margin-top: 12px;">Cancelar</button>
+      </div>
+    </div>      
+      
+    <!-- APP NORMAL (APÓS CONFIGURADO) -->
+    <div v-else>      
+      <div class="tabs-container">
+        <button :class="{ active: abaAtiva === 'ponto' }" @click="abaAtiva = 'ponto'">Bater Ponto</button>
+        <button :class="{ active: abaAtiva === 'sincronizar' }" @click="abaAtiva = 'sincronizar'">Sincronizar</button>
+      </div>
+
+      <!-- ABA BATER PONTO -->
+      <div v-if="abaAtiva === 'ponto'">
+        <div class="status-panel card">
+          <div class="status-content">
+            <div class="status-info">
+              <span class="status-name">{{ colaboradorAtualNome }}</span>
+              <span class="status-label">Total de hoje</span>
+            </div>
+            <div class="status-time">
+              {{ minhasMarcacoesHoje.length }} pontos
+            </div>
           </div>
         </div>
+
+        <div class="actions-grid">
+          <button 
+            v-for="motivo in motivos" 
+            :key="motivo.id"
+            @click="registrarPonto(motivo)"
+            class="btn-action"
+            :class="motivo.natureza === 'trabalho' ? 'btn-entrada' : 'btn-pausa'"
+            :disabled="registrando"
+          >
+            <span class="action-icon">{{ motivo.natureza === 'trabalho' ? '▶️' : '⏸️' }}</span>
+            <span class="action-text">{{ motivo.nome }}</span>
+          </button>
+        </div>
+
+        <div class="card">
+          <h2 class="section-title">Histórico de Hoje</h2>
+          <ul v-if="minhasMarcacoesHoje.length > 0" class="history-list">
+            <li v-for="marc in minhasMarcacoesHoje" :key="marc.id">
+              <div class="history-time">{{ new Date(marc.dataHoraLocal).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}</div>
+              <div class="history-motivo" :class="marc.natureza">{{ motivos.find(m => m.id === marc.motivoId)?.nome }}</div>
+            </li>
+          </ul>
+          <p v-else class="empty-state">Nenhuma marcação registrada hoje.</p>
+        </div>
       </div>
-      
-      <div v-else class="card text-center">
-        <p class="desc">Nenhum ponto pendente de sincronização.</p>
+
+      <!-- ABA SINCRONIZAR -->
+      <div v-if="abaAtiva === 'sincronizar'">
+        <div class="card text-center" v-if="diasPendentes.length > 0">
+          
+          <!-- Navegação entre dias -->
+          <div class="pagination-header" v-if="diasPendentes.length > 1">
+            <button @click="diaAnterior" :disabled="indiceDiaAtual === 0" class="btn-page">◀</button>
+            <span class="page-indicator">
+              Dia {{ indiceDiaAtual + 1 }} de {{ diasPendentes.length }}
+              <br>
+              <small>{{ diasPendentes[indiceDiaAtual].data.split('-').reverse().join('/') }}</small>
+            </span>
+            <button @click="proximoDia" :disabled="indiceDiaAtual === diasPendentes.length - 1" class="btn-page">▶</button>
+          </div>
+
+          <p class="desc" v-if="!qrCodeDataUrl">Mostre o QR Code do dia <strong>{{ diasPendentes[indiceDiaAtual].data.split('-').reverse().join('/') }}</strong> para o administrador.</p>
+          
+          <button v-if="!qrCodeDataUrl" @click="gerarQRCode" class="btn btn-primary btn-block" style="margin-top: 20px;">
+            🔄 Gerar QR Code ({{ diasPendentes[indiceDiaAtual].marcacoes.length }} pontos)
+          </button>
+
+          <div v-if="qrCodeDataUrl" class="qr-area">
+            <img :src="qrCodeDataUrl" alt="QR Code" class="qr-image" />
+            <p class="qr-hint">Aponte a câmera do administrador aqui.</p>
+            
+            <div class="qr-actions">
+              <button v-if="indiceDiaAtual < diasPendentes.length - 1" @click="proximoDia(); qrCodeDataUrl=''" class="btn btn-primary btn-block">
+                Próximo Dia ▶
+              </button>
+              <button v-else @click="confirmarSincronizacao" class="btn btn-success btn-block">
+                ✅ Finalizar Envio
+              </button>
+              <button @click="qrCodeDataUrl = ''" class="btn btn-outline btn-block" style="margin-top: 8px;">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div v-else class="card text-center">
+          <p class="desc">Nenhum ponto pendente de sincronização.</p>
+        </div>
       </div>
-    </div>
+    </div>  
   </div>
 </template>
 

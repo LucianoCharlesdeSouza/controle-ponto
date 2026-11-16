@@ -194,6 +194,27 @@ function formatarData(isoStr) {
         </div>
         <div class="menu-arrow">→</div>
       </router-link>
+     <!-- <h2 class="section-title">🔄 QR Codes Motivos e Colaborador</h2> -->
+      <router-link to="/gerar-qrcodes" class="menu-link" style="margin-top: 8px;">
+        <div class="menu-icon">📷</div>
+        <div class="menu-text">
+          <strong>Gerar Motivos e Colaborador via QR Code</strong>
+          <span>Mostre o QR Code gerado para colaborador ler no celular dele.</span>
+        </div>
+        <div class="menu-arrow">→</div>
+      </router-link>      
+    </div>
+
+    <div class="card action-card">
+      <h2 class="section-title">🔄 QR Codes Motivos e Colaborador</h2>
+      <router-link to="/gerar-qrcodes" class="menu-link">
+        <div class="menu-icon">📷</div>
+        <div class="menu-text">
+          <strong>Gerar Motivos e Colaborador via QR Code</strong>
+          <span>Mostre o QR Code gerado para colaborador ler no celular dele.</span>
+        </div>
+        <div class="menu-arrow">→</div>
+      </router-link>
     </div>
     
     <div class="card action-card">
