@@ -5,40 +5,28 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 import { getAllItems, addItem, putItem } from '../infrastructure/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
-import { showToast, showConfirm, showPrompt } from '../application/NotificationService.js';
+import { showToast, showConfirm } from '../application/NotificationService.js';
 import { criptografarDados } from '../infrastructure/crypto-util.js';
 
+// Estados de Configuração
 const isConfigurado = ref(false);
-const configurando = ref(false); // Se true, mostra a câmera
+const configurando = ref(false);
+let html5QrcodeScanner = null;
 
+// Estados do App
 const abaAtiva = ref('ponto'); // 'ponto' ou 'sincronizar'
-// const colaboradores = ref([]);
-const colaborador = ref(null); // Agora é um objeto, não um array de colaboradores
+const colaborador = ref(null);
 const motivos = ref([]);
-// const colaboradorSelecionadoId = ref('');
 const marcacoesHoje = ref([]);
 const todasMarcacoes = ref([]);
 const registrando = ref(false);
-// Dados do QR Code
-const qrCodeDataUrl = ref('');
-const textoJson = ref('');
 
+// Estados de Sincronização
+const qrCodeDataUrl = ref('');
 const diasPendentes = ref([]);
 const indiceDiaAtual = ref(0);
 
-let html5QrcodeScanner = null;
-
 onMounted(async () => {
-  // const todosColab = await getAllItems('colaboradores');
-  // colaboradores.value = todosColab.filter(c => c.situacao === 'ativo').sort((a, b) => a.nome.localeCompare(b.nome));
-
-  // motivos.value = (await getAllItems('motivos')).filter(m => m.ativo !== false).sort((a, b) => a.ordem - b.ordem);
-
-  // if (colaboradores.value.length > 0) {
-  //   colaboradorSelecionadoId.value = colaboradores.value[0].id;
-  // }
-
-  // await carregarDados();
   await verificarConfiguracao();
 });
 
@@ -79,7 +67,7 @@ async function onConfigScanSuccess(decodedText, decodedResult) {
     // 1. Se for o QR de Motivos
     if (pacote.tipo === 'config_motivos') {
       for (const m of pacote.motivos) {
-        await putItem('motivos', m); // Salva os motivos com os mesmos IDs
+        await putItem('motivos', m);
       }
       showToast('Motivos configurados! Agora leia o seu QR Code.', 'success');
     }
@@ -88,14 +76,12 @@ async function onConfigScanSuccess(decodedText, decodedResult) {
     else if (pacote.tipo === 'colaborador') {
       const colabConfig = pacote.colaborador;
       
-      // Salva o colaborador no banco local
       await putItem('colaboradores', {
         ...colabConfig,
         situacao: 'ativo',
         criadoEm: new Date().toISOString()
       });
 
-      // Salva o valor/hora
       await putItem('valoresHora', {
         id: uuidv4(),
         colaboradorId: colabConfig.id,
@@ -104,33 +90,42 @@ async function onConfigScanSuccess(decodedText, decodedResult) {
         vigenciaFim: null
       });
 
-      // Salva nas configurações que ele está pronto
       await putItem('settings', { key: 'colaborador_configurado', value: colabConfig });
       
-      showToast('Colaborador configurado com sucesso!', 'success');
+      showToast('Configuração concluída!', 'success');
       
-      if (html5QrcodeScanner) await html5QrcodeScanner.clear();
+      if (html5QrcodeScanner) {
+        await html5QrcodeScanner.clear();
+        html5QrcodeScanner = null;
+      }
       configurando.value = false;
       await verificarConfiguracao();
     }
   } catch (e) {
+    console.error(e);
     showToast('QR Code inválido.', 'error');
   }
 }
 
+// --- LÓGICA DO APP NORMAL ---
+
 const dataAtual = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
 
+// CORREÇÃO: Agora acessa diretamente o objeto colaborador
 const colaboradorAtualNome = computed(() => {
-  return colaboradores.value.find(c => c.id === colaborador.value.id)?.nome || 'Selecione';
+  return colaborador.value ? colaborador.value.nome : 'Carregando...';
 });
 
 const minhasMarcacoesHoje = computed(() => {
+  if (!colaborador.value) return [];
   return marcacoesHoje.value
     .filter(m => m.colaboradorId === colaborador.value.id)
     .sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal));
 });
 
 async function carregarDados() {
+  if (!colaborador.value) return;
+
   const agora = new Date();
   const hojeStr = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`;
   
@@ -138,7 +133,6 @@ async function carregarDados() {
   todasMarcacoes.value = todas;
   marcacoesHoje.value = todas.filter(m => m.dataHoraLocal.startsWith(hojeStr));
 
-  // NOVO: Agrupar os pendentes por dia
   const pendentes = todasMarcacoes.value.filter(
     m => m.colaboradorId === colaborador.value.id && !m.sincronizado
   );
@@ -150,7 +144,6 @@ async function carregarDados() {
     agrupados[dia].push(m);
   });
 
-  // Ordena os dias do mais antigo para o mais novo
   diasPendentes.value = Object.keys(agrupados).sort().map(dia => ({
     data: dia,
     marcacoes: agrupados[dia]
@@ -161,7 +154,7 @@ async function carregarDados() {
 }
 
 async function registrarPonto(motivo) {
-  if (!colaborador.value.id || registrando.value) return;
+  if (!colaborador.value || registrando.value) return;
   registrando.value = true;
 
   const agora = new Date();
@@ -176,7 +169,7 @@ async function registrarPonto(motivo) {
     natureza: motivo.natureza,
     origem: 'colaborador',
     inconsistente: false,
-    sincronizado: false, // Flag para saber se já foi pro admin
+    sincronizado: false,
     criadoEm: new Date().toISOString()
   };
 
@@ -192,7 +185,7 @@ async function registrarPonto(motivo) {
   }
 }
 
-// --- LÓGICA DE GERAÇÃO DE QR CODE ---
+// --- LÓGICA DE GERAÇÃO DE QR CODE (SINCRONIZAÇÃO) ---
 
 async function gerarQRCode() {
   if (diasPendentes.value.length === 0) {
@@ -224,12 +217,10 @@ async function gerarQRCode() {
     const jsonString = JSON.stringify(pacote);
     const encryptedString = await criptografarDados(jsonString);
     
-    // QR Code com nível H (High) para garantir leitura mesmo com a tela um pouco suja/refletindo
     const url = await QRCode.toDataURL(encryptedString, {
       width: 800,
       margin: 1,
-      color: { dark: '#1e293b', light: '#ffffff' },
-    //   errorCorrectionLevel: 'H'
+      color: { dark: '#1e293b', light: '#ffffff' }
     });
     qrCodeDataUrl.value = url;
   } catch (err) {
@@ -237,19 +228,15 @@ async function gerarQRCode() {
   }
 }
 
-// Avança para o próximo dia
 function proximoDia() {
   if (indiceDiaAtual.value < diasPendentes.value.length - 1) {
     indiceDiaAtual.value++;
     qrCodeDataUrl.value = '';
-    // Opcional: gerar automaticamente o próximo
-    // gerarQRCode(); 
   } else {
     showToast('Este é o último dia pendente.', 'info');
   }
 }
 
-// Volta para o dia anterior
 function diaAnterior() {
   if (indiceDiaAtual.value > 0) {
     indiceDiaAtual.value--;
@@ -286,18 +273,8 @@ async function confirmarSincronizacao() {
 
 <template>
   <div class="page-container">
-    <!-- <header class="app-header">
-      <h1>Portal do Colaborador</h1>
-      <p>{{ dataAtual }}</p>
-    </header> -->
-
-    <!-- <div class="card filter-card">
-      <label class="form-label">Quem é você?</label>
-      <select v-model="colaboradorSelecionadoId" class="form-select">
-        <option v-for="c in colaboradores" :key="c.id" :value="c.id">{{ c.nome }}</option>
-      </select>
-    </div> -->
-
+    
+    <!-- TELA DE CONFIGURAÇÃO INICIAL -->
     <div v-if="!isConfigurado" class="config-screen">
       <header class="app-header">
         <h1>Bem-vindo!</h1>
@@ -321,8 +298,14 @@ async function confirmarSincronizacao() {
     </div>      
       
     <!-- APP NORMAL (APÓS CONFIGURADO) -->
-    <div v-else>   
-      {{ isConfigurado }}   
+    <div v-else>
+      
+      <!-- Mostra o nome do colaborador no topo -->
+      <header class="app-header" style="margin-bottom: 16px;">
+        <h1>Olá, {{ colaboradorAtualNome.split(' ')[0] }}</h1>
+        <p>{{ dataAtual }}</p>
+      </header>
+
       <div class="tabs-container">
         <button :class="{ active: abaAtiva === 'ponto' }" @click="abaAtiva = 'ponto'">Bater Ponto</button>
         <button :class="{ active: abaAtiva === 'sincronizar' }" @click="abaAtiva = 'sincronizar'">Sincronizar</button>
@@ -372,7 +355,6 @@ async function confirmarSincronizacao() {
       <div v-if="abaAtiva === 'sincronizar'">
         <div class="card text-center" v-if="diasPendentes.length > 0">
           
-          <!-- Navegação entre dias -->
           <div class="pagination-header" v-if="diasPendentes.length > 1">
             <button @click="diaAnterior" :disabled="indiceDiaAtual === 0" class="btn-page">◀</button>
             <span class="page-indicator">
@@ -416,8 +398,28 @@ async function confirmarSincronizacao() {
 </template>
 
 <style scoped>
-.filter-card { border-top: 4px solid var(--color-primary); margin-bottom: 16px; }
+/* Estilos de Configuração */
+.config-screen { max-width: 600px; margin: 0 auto; }
+.icon-large { font-size: 3rem; margin-bottom: 16px; }
+.text-center { text-align: center; }
+.desc { color: var(--color-muted); font-size: 0.9rem; margin-bottom: 20px; }
 
+.camera-card {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 2px dashed #cbd5e1;
+  background: #f8fafc;
+  margin-bottom: 24px;
+}
+.camera-reader { width: 100%; min-height: 300px; background: #000; }
+:deep(#reader video) { border-radius: 0 !important; }
+:deep(#reader__dashboard_section) { padding: 16px !important; background: white; }
+:deep(#reader__dashboard_section button) { background: var(--color-primary) !important; color: white !important; border: none !important; padding: 10px 16px !important; border-radius: var(--radius-md) !important; font-weight: bold !important; cursor: pointer !important; }
+.camera-hint { text-align: center; padding: 16px; font-size: 0.85rem; color: var(--color-muted); margin: 0; }
+
+/* Abas */
 .tabs-container {
   display: flex;
   background: #f1f5f9;
@@ -481,8 +483,6 @@ async function confirmarSincronizacao() {
 .history-motivo.pausa { background: var(--color-warning-light); color: #92400e; }
 
 /* QR Code */
-.text-center { text-align: center; }
-.desc { color: var(--color-muted); font-size: 0.9rem; margin-bottom: 20px; }
 .qr-area { display: flex; flex-direction: column; align-items: center; margin-top: 20px; }
 .qr-image { width: 100%; max-width: 300px; border-radius: var(--radius-md); box-shadow: var(--shadow-md); border: 1px solid #e2e8f0; }
 .qr-hint { font-size: 0.85rem; color: var(--color-muted); margin-top: 12px; font-weight: 600; }
