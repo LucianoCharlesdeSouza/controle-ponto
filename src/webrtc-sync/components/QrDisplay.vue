@@ -21,7 +21,7 @@ watch(
       imageUrl.value = await QRCode.toDataURL(value, {
         width: size,
         margin: 2,
-        // errorCorrectionLevel: 'M',
+        errorCorrectionLevel: 'M',
         color: { dark: '#111827', light: '#FFFFFF' },
       });
     } catch (error) {

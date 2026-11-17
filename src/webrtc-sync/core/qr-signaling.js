@@ -1,4 +1,4 @@
-const CHUNK_SIZE = 650;
+const CHUNK_SIZE = 350; // QR menos denso: leitura mais confiável em telas de celular.
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 

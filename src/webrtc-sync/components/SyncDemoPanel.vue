@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import QrDisplay from './QrDisplay.vue';
 import QrScanner from './QrScanner.vue';
 
@@ -13,8 +13,52 @@ const jsonText = ref(JSON.stringify({ message: 'Olá pelo WebRTC', sentAt: new D
 const scanProgress = ref('');
 const sending = ref(false);
 const sendResult = ref('');
+const autoAdvance = ref(true);
+const autoAdvanceMs = ref(2200);
+const scanBusy = ref(false);
+let autoAdvanceTimer = null;
 const expectedSignal = computed(() => props.role === 'a' ? 'answer' : 'offer');
 const qrTitle = computed(() => props.role === 'a' ? 'Oferta de conexão' : 'Resposta de conexão');
+
+function stopAutoAdvance() {
+  if (autoAdvanceTimer !== null) {
+    window.clearInterval(autoAdvanceTimer);
+    autoAdvanceTimer = null;
+  }
+}
+
+function startAutoAdvance() {
+  stopAutoAdvance();
+  if (!autoAdvance.value || props.sync.qrFrames.value.length < 2) return;
+
+  autoAdvanceTimer = window.setInterval(() => {
+    const lastIndex = props.sync.qrFrames.value.length - 1;
+    if (props.sync.qrIndex.value >= lastIndex) {
+      props.sync.qrIndex.value = 0;
+      return;
+    }
+    props.sync.nextQr();
+  }, autoAdvanceMs.value);
+}
+
+watch(
+  () => props.sync.qrFrames.value.length,
+  length => {
+    stopAutoAdvance();
+    if (length > 0) startAutoAdvance();
+  },
+);
+
+watch(autoAdvance, enabled => {
+  if (enabled) startAutoAdvance();
+  else stopAutoAdvance();
+});
+
+watch(autoAdvanceMs, () => {
+  if (autoAdvance.value) startAutoAdvance();
+});
+
+onBeforeUnmount(stopAutoAdvance);
 
 async function startConnection() {
   sendResult.value = '';
@@ -27,6 +71,8 @@ async function startScanner() {
 }
 
 async function handleScan(raw) {
+  if (scanBusy.value) return;
+  scanBusy.value = true;
   try {
     const result = await props.sync.receiveSignalFrame(raw, expectedSignal.value);
     if (result.complete) {
@@ -37,6 +83,8 @@ async function handleScan(raw) {
     }
   } catch (error) {
     scanProgress.value = error.message;
+  } finally {
+    scanBusy.value = false;
   }
 }
 
@@ -83,11 +131,32 @@ async function sendJson() {
         <p class="muted">
           QR {{ sync.qrIndex.value + 1 }} de {{ sync.qrFrames.value.length }}
         </p>
-        <div class="actions">
-          <button class="secondary" :disabled="sync.qrIndex.value === 0" @click="sync.previousQr">Anterior</button>
-          <button class="secondary" :disabled="sync.qrIndex.value >= sync.qrFrames.value.length - 1" @click="sync.nextQr">Próximo</button>
+        <div class="auto-controls">
+          <label class="auto-toggle">
+            <input v-model="autoAdvance" type="checkbox" />
+            Avançar QR automaticamente
+          </label>
+          <label class="interval-control">
+            Intervalo
+            <select v-model.number="autoAdvanceMs">
+              <option :value="1500">1,5 segundo</option>
+              <option :value="2200">2,2 segundos</option>
+              <option :value="3000">3 segundos</option>
+              <option :value="4000">4 segundos</option>
+            </select>
+          </label>
         </div>
-        <p class="hint">Mantenha este QR visível enquanto o outro aparelho faz a leitura. Avance os fragmentos até completar.</p>
+        <div class="actions">
+          <button class="secondary" :disabled="sync.qrIndex.value === 0" @click="sync.previousQr()">Anterior</button>
+          <button class="secondary" :disabled="sync.qrFrames.value.length < 2" @click="autoAdvance ? (autoAdvance = false) : (autoAdvance = true)">
+            {{ autoAdvance ? 'Pausar sequência' : 'Retomar sequência' }}
+          </button>
+          <button class="secondary" :disabled="sync.qrIndex.value >= sync.qrFrames.value.length - 1" @click="sync.nextQr()">Próximo</button>
+        </div>
+        <div class="sequence-track">
+          <div :style="{ width: `${((sync.qrIndex.value + 1) / sync.qrFrames.value.length) * 100}%` }"></div>
+        </div>
+        <p class="hint">A sequência repete automaticamente do primeiro ao último QR até o outro aparelho concluir a leitura. Se a câmera estiver demorando, aumente o intervalo.</p>
       </div>
 
       <div class="scanner-area">
@@ -141,7 +210,12 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 button.secondary { background:#e2e8f0; color:#1e293b; }
 textarea { display:block; width:100%; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:10px; padding:12px; font: .85rem ui-monospace,monospace; margin:10px 0; }
 .qr-area,.scanner-area { margin-top:18px; padding-top:12px; border-top:1px solid #e2e8f0; }
-.actions { display:flex; justify-content:center; gap:8px; }
+.actions { display:flex; justify-content:center; flex-wrap:wrap; gap:8px; }
+.auto-controls { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin:12px 0; font-size:.88rem; }
+.auto-toggle,.interval-control { display:flex; align-items:center; gap:7px; }
+.interval-control select { border:1px solid #cbd5e1; border-radius:8px; padding:7px; background:white; }
+.sequence-track { height:6px; border-radius:99px; background:#e2e8f0; overflow:hidden; margin:12px 0; }
+.sequence-track div { height:100%; background:#0284c7; transition:width .2s linear; }
 .hint { text-align:center; }
 .error { color:#b91c1c; background:#fef2f2; padding:10px; border-radius:8px; }
 progress { width:100%; display:block; }
