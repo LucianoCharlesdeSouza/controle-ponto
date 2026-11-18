@@ -181,7 +181,8 @@ async function aplicarConfiguracao() {
 
   } catch (e) {
     console.error(e);
-    showToast('Erro ao salvar configuração.', 'error');
+    showToast(e, 'error');
+    // showToast('Erro ao salvar configuração.', 'error');
   }
 }
 
