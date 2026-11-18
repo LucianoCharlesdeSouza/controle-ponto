@@ -71,7 +71,7 @@ import { notificationState, handleConfirm, handlePrompt } from '../application/N
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   padding: 12px 20px;
   border-radius: var(--radius-full);
@@ -79,13 +79,31 @@ import { notificationState, handleConfirm, handlePrompt } from '../application/N
   color: white;
   font-weight: 600;
   font-size: 0.9rem;
+  box-sizing: border-box;
   box-shadow: var(--shadow-lg);
   pointer-events: auto;
-  max-width: 90%;
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.toast .icon {
+    flex-shrink: 0;
+}
+
+.message {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+    min-width: 0;
+}
+
+.toast .message {
+    flex: 1;
+    min-width: 0;
+}
+
 .toast.success { background: var(--color-success); }
 .toast.error { background: var(--color-danger); }
 .toast.info { background: var(--color-primary); }
