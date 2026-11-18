@@ -8,33 +8,45 @@ import QRCode from 'qrcode';
 import { showToast, showConfirm } from '../application/NotificationService.js';
 import { criptografarDados } from '../infrastructure/crypto-util.js';
 
-// Estados de Configuração
+// ========== ESTADOS DE CONFIGURAÇÃO ==========
 const isConfigurado = ref(false);
 const configurando = ref(false);
+const aguardandoConfirmacao = ref(false); // Novo: Tela de revisão
 let html5QrcodeScanner = null;
 
-// Estados do App
-const abaAtiva = ref('ponto'); // 'ponto' ou 'sincronizar'
+// Staging de recebimento
+const motivosRecebidos = ref([]);
+const pacotesRecebidos = ref(new Set());
+const totalPacotesMotivos = ref(0);
+const colaboradorRecebido = ref(null);
+
+// ========== ESTADOS DO APP ==========
+const abaAtiva = ref('ponto');
 const colaborador = ref(null);
 const motivos = ref([]);
 const marcacoesHoje = ref([]);
 const todasMarcacoes = ref([]);
 const registrando = ref(false);
 
-// Estados de Sincronização
+// ========== ESTADOS DE SINCRONIZAÇÃO ==========
 const qrCodeDataUrl = ref('');
 const diasPendentes = ref([]);
 const indiceDiaAtual = ref(0);
-
 const isTransmitindo = ref(false);
 const intervaloTimer = ref(null);
-const tempoPausa = 2200; // Tempo em milissegundos que cada QR Code fica na tela
-const loteAtualQrCodes = ref([]); // Todos os QR Codes gerados do lote
+const tempoPausa = 2200;
+const loteAtualQrCodes = ref([]);
 const indiceQrCodeAtual = ref(0);
-const cicloCompleto = ref(false);
 
 onMounted(async () => {
   await verificarConfiguracao();
+});
+
+onUnmounted(() => {
+  pararTransmissao();
+  if (html5QrcodeScanner) {
+    html5QrcodeScanner.clear().catch(e => console.error(e));
+  }
 });
 
 async function verificarConfiguracao() {
@@ -52,10 +64,14 @@ async function verificarConfiguracao() {
   }
 }
 
-// --- LEITOR DE CONFIGURAÇÃO INICIAL ---
+// ========== LEITOR DE CONFIGURAÇÃO ==========
 function iniciarConfiguracao() {
   configurando.value = true;
-  
+  motivosRecebidos.value = [];
+  pacotesRecebidos.value.clear();
+  totalPacotesMotivos.value = 0;
+  colaboradorRecebido.value = null;
+
   setTimeout(() => {
     html5QrcodeScanner = new Html5QrcodeScanner(
       "reader-config", 
@@ -71,42 +87,50 @@ async function onConfigScanSuccess(decodedText, decodedResult) {
     const pacote = JSON.parse(decodedText);
     if (pacote.app !== 'PontoFolha') throw new Error('QR Code inválido');
 
-    // 1. Se for o QR de Motivos
+    // 1. QR de Motivos (fragmentado)
     if (pacote.tipo === 'config_motivos') {
+      const idPacote = `motivo-${pacote.paginacao.atual}`;
+      
+      if (pacotesRecebidos.value.has(idPacote)) return; // Já lido
+
+      totalPacotesMotivos.value = pacote.paginacao.total;
+      
       for (const m of pacote.motivos) {
-        await putItem('motivos', m);
+        if (!motivosRecebidos.value.some(mot => mot.id === m.id)) {
+          motivosRecebidos.value.push(m);
+        }
       }
-      showToast('Motivos configurados! Agora leia o seu QR Code.', 'success');
+      
+      pacotesRecebidos.value.add(idPacote);
+      
+      const lidos = pacotesRecebidos.value.size;
+      showToast(`Motivos: ${lidos} de ${totalPacotesMotivos.value} pacotes`, 'success', false);
+
+      if (lidos === totalPacotesMotivos.value) {
+        showToast('Motivos completos! Agora leia o QR Code do colaborador.', 'info');
+      }
     }
     
-    // 2. Se for o QR do Colaborador
+    // 2. QR do Colaborador (único)
     else if (pacote.tipo === 'colaborador') {
-      const colabConfig = pacote.colaborador;
-      
-      await putItem('colaboradores', {
-        ...colabConfig,
-        situacao: 'ativo',
-        criadoEm: new Date().toISOString()
-      });
+      if (!totalPacotesMotivos.value || motivosRecebidos.value.length === 0) {
+        showToast('Leia primeiro os Motivos!', 'error');
+        return;
+      }
 
-      await putItem('valoresHora', {
-        id: uuidv4(),
-        colaboradorId: colabConfig.id,
-        valorCentavos: pacote.valorHoraCentavos,
-        vigenciaInicio: new Date().toISOString().split('T')[0],
-        vigenciaFim: null
-      });
+      colaboradorRecebido.value = {
+        colaborador: pacote.colaborador,
+        valorHoraCentavos: pacote.valorHoraCentavos
+      };
 
-      await putItem('settings', { key: 'colaborador_configurado', value: colabConfig });
-      
-      showToast('Configuração concluída!', 'success');
-      
+      // Para a câmera e abre a tela de revisão
       if (html5QrcodeScanner) {
         await html5QrcodeScanner.clear();
         html5QrcodeScanner = null;
       }
       configurando.value = false;
-      await verificarConfiguracao();
+      aguardandoConfirmacao.value = true;
+      if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
     }
   } catch (e) {
     console.error(e);
@@ -114,11 +138,64 @@ async function onConfigScanSuccess(decodedText, decodedResult) {
   }
 }
 
-// --- LÓGICA DO APP NORMAL ---
+// ========== APLICAR CONFIGURAÇÃO ==========
+async function aplicarConfiguracao() {
+  if (!colaboradorRecebido.value) return;
 
+  const confirmou = await showConfirm(
+    'Aplicar Configuração', 
+    `Confirmar o cadastro de ${colaboradorRecebido.value.colaborador.nome} no aplicativo?`
+  );
+
+  if (!confirmou) return;
+
+  try {
+    // Salva os motivos
+    for (const m of motivosRecebidos.value) {
+      await putItem('motivos', m);
+    }
+
+    // Salva o colaborador
+    const colabConfig = colaboradorRecebido.value.colaborador;
+    await putItem('colaboradores', {
+      ...colabConfig,
+      situacao: 'ativo',
+      criadoEm: new Date().toISOString()
+    });
+
+    // Salva o valor/hora
+    await putItem('valoresHora', {
+      id: uuidv4(),
+      colaboradorId: colabConfig.id,
+      valorCentavos: colaboradorRecebido.value.valorHoraCentavos,
+      vigenciaInicio: new Date().toISOString().split('T')[0],
+      vigenciaFim: null
+    });
+
+    // Salva nas configurações
+    await putItem('settings', { key: 'colaborador_configurado', value: colabConfig });
+    
+    showToast('Configuração aplicada com sucesso!', 'success');
+    aguardandoConfirmacao.value = false;
+    await verificarConfiguracao();
+
+  } catch (e) {
+    console.error(e);
+    showToast('Erro ao salvar configuração.', 'error');
+  }
+}
+
+function cancelarConfiguracao() {
+  aguardandoConfirmacao.value = false;
+  colaboradorRecebido.value = null;
+  motivosRecebidos.value = [];
+  pacotesRecebidos.value.clear();
+  totalPacotesMotivos.value = 0;
+}
+
+// ========== APP NORMAL ==========
 const dataAtual = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
 
-// CORREÇÃO: Agora acessa diretamente o objeto colaborador
 const colaboradorAtualNome = computed(() => {
   return colaborador.value ? colaborador.value.nome : 'Carregando...';
 });
@@ -192,19 +269,17 @@ async function registrarPonto(motivo) {
   }
 }
 
-// --- LÓGICA DE GERAÇÃO DE QR CODE (SINCRONIZAÇÃO) ---
+// ========== SINCRONIZAÇÃO (ENVIO DE PONTOS) ==========
 async function gerarQRCode() {
   if (diasPendentes.value.length === 0) {
     showToast('Nenhum ponto pendente.', 'info');
     return;
   }
 
-  // Pega TODAS as marcações pendentes (de todos os dias)
   const todasPendentes = todasMarcacoes.value
     .filter(m => m.colaboradorId === colaborador.value.id && !m.sincronizado)
     .sort((a, b) => new Date(a.dataHoraLocal) - new Date(b.dataHoraLocal));
 
-  // Divide em pacotes de 2 marcações
   const tamanhoPacote = 2;
   const pacotes = [];
   
@@ -214,7 +289,6 @@ async function gerarQRCode() {
 
   loteAtualQrCodes.value = [];
   
-  // Gera o QR Code de cada pacote
   for (let i = 0; i < pacotes.length; i++) {
     const pacote = {
       app: 'PontoFolha',
@@ -225,7 +299,6 @@ async function gerarQRCode() {
         atual: i + 1,
         total: pacotes.length
       },
-      cicloCompleto: false,
       marcacoes: pacotes[i].map(m => ({
         id: m.id,
         dataHoraLocal: m.dataHoraLocal,
@@ -247,7 +320,6 @@ async function gerarQRCode() {
     loteAtualQrCodes.value.push(url);
   }
 
-  // Inicia a transmissão
   indiceQrCodeAtual.value = 0;
   isTransmitindo.value = true;
   qrCodeDataUrl.value = loteAtualQrCodes.value[0];
@@ -256,13 +328,11 @@ async function gerarQRCode() {
 }
 
 function iniciarTransmissao() {
-  pararTransmissao(); // Limpa qualquer timer antigo
+  pararTransmissao();
   
   intervaloTimer.value = setInterval(() => {
-    // Loop infinito
     indiceQrCodeAtual.value = (indiceQrCodeAtual.value + 1) % loteAtualQrCodes.value.length;
     qrCodeDataUrl.value = loteAtualQrCodes.value[indiceQrCodeAtual.value];
-    
     if (navigator.vibrate) navigator.vibrate(20);
   }, tempoPausa);
 }
@@ -275,7 +345,6 @@ function pararTransmissao() {
   }
 }
 
-// Cancela o envio
 function cancelarSincronizacao() {
   pararTransmissao();
   qrCodeDataUrl.value = '';
@@ -283,71 +352,10 @@ function cancelarSincronizacao() {
   indiceQrCodeAtual.value = 0;
 }
 
-// async function gerarQRCode() {
-//   if (diasPendentes.value.length === 0) {
-//     showToast('Nenhum ponto pendente.', 'info');
-//     return;
-//   }
-
-//   const diaParaEnviar = diasPendentes.value[indiceDiaAtual.value];
-  
-//   const pacote = {
-//     app: 'PontoFolha',
-//     versao: 1,
-//     colaboradorId: colaborador.value.id,
-//     colaboradorNome: colaboradorAtualNome.value,
-//     paginacao: {
-//       atual: indiceDiaAtual.value + 1,
-//       total: diasPendentes.value.length
-//     },
-//     marcacoes: diaParaEnviar.marcacoes.map(m => ({
-//       id: m.id,
-//       dataHoraLocal: m.dataHoraLocal,
-//       motivoId: m.motivoId,
-//       natureza: m.natureza,
-//       criadoEm: m.criadoEm
-//     }))
-//   };
-
-//   try {
-//     const jsonString = JSON.stringify(pacote);
-//     const encryptedString = await criptografarDados(jsonString);
-    
-//     const url = await QRCode.toDataURL(encryptedString, {
-//       width: 800,
-//       margin: 1,
-//       color: { dark: '#1e293b', light: '#ffffff' }
-//     });
-//     qrCodeDataUrl.value = url;
-//   } catch (err) {
-//     showToast('Erro ao gerar QR Code.', 'error');
-//   }
-// }
-
-function proximoDia() {
-  if (indiceDiaAtual.value < diasPendentes.value.length - 1) {
-    indiceDiaAtual.value++;
-    qrCodeDataUrl.value = '';
-  } else {
-    showToast('Este é o último dia pendente.', 'info');
-  }
-}
-
-function diaAnterior() {
-  if (indiceDiaAtual.value > 0) {
-    indiceDiaAtual.value--;
-    qrCodeDataUrl.value = '';
-  }
-}
-
-onUnmounted(() => {
-  pararTransmissao();
-});
-
 async function confirmarSincronizacao() {
   const confirmou = await showConfirm(
     'Concluir Sincronização', 
-    'Tem certeza que o administrador já leu o QR Code? Os pontos serão marcados como enviados.'
+    'Tem certeza que o administrador já leu os pontos?'
   );
   
   if (!confirmou) return;
@@ -381,26 +389,62 @@ async function confirmarSincronizacao() {
         <p>Configure seu aplicativo</p>
       </header>
 
-      <div v-if="!configurando" class="card text-center">
+      <!-- Tela 1: Botão para abrir a câmera -->
+      <div v-if="!configurando && !aguardandoConfirmacao" class="card text-center">
         <div class="icon-large">📲</div>
         <h2>Configuração Inicial</h2>
-        <p class="desc">Para começar, você precisa ler dois QR Codes gerados pelo administrador: um com os motivos de ponto e outro com seus dados.</p>
+        <p class="desc">Para começar, você precisa ler os QR Codes gerados pelo administrador.</p>
         <button @click="iniciarConfiguracao" class="btn btn-primary btn-block" style="margin-top: 20px;">
           📷 Abrir Câmera
         </button>
       </div>
 
+      <!-- Tela 2: Câmera ativa -->
       <div v-if="configurando" class="card camera-card">
         <div id="reader-config" class="camera-reader"></div>
+        <div class="config-status">
+          <p><strong>Motivos:</strong> {{ pacotesRecebidos.size }} de {{ totalPacotesMotivos || '?' }} pacotes</p>
+          <p v-if="colaboradorRecebido"><strong>Colaborador:</strong> Lido!</p>
+        </div>
         <p class="camera-hint">Aponte para o QR Code de Motivos (1) e depois para o seu QR Code (2).</p>
         <button @click="configurando = false" class="btn btn-outline btn-block" style="margin-top: 12px;">Cancelar</button>
+      </div>
+
+      <!-- Tela 3: Revisão antes de aplicar -->
+      <div v-if="aguardandoConfirmacao" class="card">
+        <h2 class="section-title" style="text-align: center;">✅ Revisão da Configuração</h2>
+        
+        <div class="review-section">
+          <h3>Motivos Recebidos ({{ motivosRecebidos.length }})</h3>
+          <ul class="review-list">
+            <li v-for="m in motivosRecebidos" :key="m.id">
+              <span class="badge-natureza" :class="m.natureza">{{ m.natureza === 'trabalho' ? '▶️' : '⏸️' }}</span>
+              {{ m.nome }}
+            </li>
+          </ul>
+        </div>
+
+        <div class="review-section" v-if="colaboradorRecebido">
+          <h3>Colaborador</h3>
+          <div class="colab-review">
+            <p><strong>Nome:</strong> {{ colaboradorRecebido.colaborador.nome }}</p>
+            <p><strong>Valor/Hora:</strong> R$ {{ (colaboradorRecebido.valorHoraCentavos / 100).toFixed(2).replace('.', ',') }}</p>
+          </div>
+        </div>
+
+        <div class="review-actions">
+          <button @click="aplicarConfiguracao" class="btn btn-success btn-block">
+            ✅ Aplicar Configuração
+          </button>
+          <button @click="cancelarConfiguracao" class="btn btn-outline btn-block" style="margin-top: 8px;">
+            ❌ Cancelar e Recomeçar
+          </button>
+        </div>
       </div>
     </div>      
       
     <!-- APP NORMAL (APÓS CONFIGURADO) -->
     <div v-else>
-      
-      <!-- Mostra o nome do colaborador no topo -->
       <header class="app-header" style="margin-bottom: 16px;">
         <h1>Olá, {{ colaboradorAtualNome.split(' ')[0] }}</h1>
         <p>{{ dataAtual }}</p>
@@ -452,13 +496,11 @@ async function confirmarSincronizacao() {
       </div>
 
       <!-- ABA SINCRONIZAR -->
-      <!-- ABA SINCRONIZAR -->
       <div v-if="abaAtiva === 'sincronizar'">
         <div class="card text-center" v-if="diasPendentes.length > 0">
           
           <p class="desc" v-if="!qrCodeDataUrl">
             Você tem <strong>{{ diasPendentes.reduce((acc, d) => acc + d.marcacoes.length, 0) }} pontos</strong> pendentes.
-            Clique abaixo para iniciar o envio automático.
           </p>
           
           <button v-if="!qrCodeDataUrl" @click="gerarQRCode" class="btn btn-primary btn-block" style="margin-top: 20px;">
@@ -490,8 +532,6 @@ async function confirmarSincronizacao() {
           <p class="desc">Nenhum ponto pendente de sincronização.</p>
         </div>
       </div>
-
-
     </div>  
   </div>
 </template>
@@ -517,6 +557,54 @@ async function confirmarSincronizacao() {
 :deep(#reader__dashboard_section) { padding: 16px !important; background: white; }
 :deep(#reader__dashboard_section button) { background: var(--color-primary) !important; color: white !important; border: none !important; padding: 10px 16px !important; border-radius: var(--radius-md) !important; font-weight: bold !important; cursor: pointer !important; }
 .camera-hint { text-align: center; padding: 16px; font-size: 0.85rem; color: var(--color-muted); margin: 0; }
+
+.config-status {
+  background: white;
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: center;
+}
+.config-status p { margin: 4px 0; font-size: 0.9rem; font-weight: 600; }
+
+/* Revisão */
+.review-section {
+  margin-bottom: 20px;
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid #e2e8f0;
+}
+.review-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 1rem;
+  color: var(--color-primary);
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 8px;
+}
+.review-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.review-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+.badge-natureza {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.badge-natureza.trabalho { background: var(--color-success-light); color: #065f46; }
+.badge-natureza.pausa { background: var(--color-warning-light); color: #92400e; }
+
+.colab-review p { margin: 4px 0; font-size: 0.95rem; }
+.review-actions { margin-top: 24px; }
 
 /* Abas */
 .tabs-container {
@@ -583,45 +671,8 @@ async function confirmarSincronizacao() {
 
 /* QR Code */
 .qr-area { display: flex; flex-direction: column; align-items: center; margin-top: 20px; }
+.qr-container { position: relative; display: inline-block; }
 .qr-image { width: 100%; max-width: 300px; border-radius: var(--radius-md); box-shadow: var(--shadow-md); border: 1px solid #e2e8f0; }
-.qr-hint { font-size: 0.85rem; color: var(--color-muted); margin-top: 12px; font-weight: 600; }
-
-.empty-state { text-align: center; padding: 20px; color: var(--color-muted); }
-
-.pagination-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #f1f5f9;
-  padding: 12px;
-  border-radius: var(--radius-md);
-  margin-bottom: 16px;
-}
-.page-indicator {
-  text-align: center;
-  font-weight: 700;
-  font-size: 0.9rem;
-  color: var(--color-text);
-}
-.page-indicator small { color: var(--color-muted); font-weight: 500; }
-.btn-page {
-  background: white;
-  border: 1px solid #cbd5e1;
-  border-radius: 50%;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-}
-.btn-page:disabled { opacity: 0.3; }
-
-.qr-container {
-  position: relative;
-  display: inline-block;
-}
-
 .qr-progress {
   position: absolute;
   bottom: 10px;
@@ -635,4 +686,6 @@ async function confirmarSincronizacao() {
   font-weight: 700;
   white-space: nowrap;
 }
+.qr-hint { font-size: 0.85rem; color: var(--color-muted); margin-top: 12px; font-weight: 600; }
+.empty-state { text-align: center; padding: 20px; color: var(--color-muted); }
 </style>
