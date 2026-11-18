@@ -11,14 +11,14 @@ const colaboradorSelecionadoId = ref('');
 // Controle de transmissão para Motivos
 const motivosPacotes = ref([]);
 const motivosIndice = ref(0);
-const motivosTimer = null;
+let motivosTimer = null; // CORRIGIDO: let em vez de const
 const motivosTransmitindo = ref(false);
 const motivosQrAtual = ref('');
 
 // Controle de transmissão para Colaborador
 const colabPacotes = ref([]);
 const colabIndice = ref(0);
-const colabTimer = null;
+let colabTimer = null; // CORRIGIDO: let em vez de const
 const colabTransmitindo = ref(false);
 const colabQrAtual = ref('');
 
