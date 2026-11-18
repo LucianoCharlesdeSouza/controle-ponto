@@ -11,10 +11,9 @@ import { criptografarDados } from '../infrastructure/crypto-util.js';
 // ========== ESTADOS DE CONFIGURAÇÃO ==========
 const isConfigurado = ref(false);
 const configurando = ref(false);
-const aguardandoConfirmacao = ref(false); // Novo: Tela de revisão
+const aguardandoConfirmacao = ref(false);
 let html5QrcodeScanner = null;
 
-// Staging de recebimento
 const motivosRecebidos = ref([]);
 const pacotesRecebidos = ref(new Set());
 const totalPacotesMotivos = ref(0);
@@ -91,7 +90,7 @@ async function onConfigScanSuccess(decodedText, decodedResult) {
     if (pacote.tipo === 'config_motivos') {
       const idPacote = `motivo-${pacote.paginacao.atual}`;
       
-      if (pacotesRecebidos.value.has(idPacote)) return; // Já lido
+      if (pacotesRecebidos.value.has(idPacote)) return;
 
       totalPacotesMotivos.value = pacote.paginacao.total;
       
@@ -123,7 +122,6 @@ async function onConfigScanSuccess(decodedText, decodedResult) {
         valorHoraCentavos: pacote.valorHoraCentavos
       };
 
-      // Para a câmera e abre a tela de revisão
       if (html5QrcodeScanner) {
         await html5QrcodeScanner.clear();
         html5QrcodeScanner = null;
@@ -138,7 +136,7 @@ async function onConfigScanSuccess(decodedText, decodedResult) {
   }
 }
 
-// ========== APLICAR CONFIGURAÇÃO ==========
+// ========== APLICAR CONFIGURAÇÃO (CORRIGIDO) ==========
 async function aplicarConfiguracao() {
   if (!colaboradorRecebido.value) return;
 
@@ -150,20 +148,23 @@ async function aplicarConfiguracao() {
   if (!confirmou) return;
 
   try {
-    // Salva os motivos
+    // Remove a reatividade do Vue antes de salvar no IndexedDB
+    const clonar = (obj) => JSON.parse(JSON.stringify(obj));
+
+    // Salva os motivos copiando os IDs originais do admin
     for (const m of motivosRecebidos.value) {
-      await putItem('motivos', m);
+      await putItem('motivos', clonar(m));
     }
 
-    // Salva o colaborador
-    const colabConfig = colaboradorRecebido.value.colaborador;
+    // Salva o colaborador copiando o ID original do admin
+    const colabConfig = clonar(colaboradorRecebido.value.colaborador);
     await putItem('colaboradores', {
       ...colabConfig,
       situacao: 'ativo',
       criadoEm: new Date().toISOString()
     });
 
-    // Salva o valor/hora
+    // Salva o valor/hora (cria um ID novo para o registro de vigência)
     await putItem('valoresHora', {
       id: uuidv4(),
       colaboradorId: colabConfig.id,
@@ -172,17 +173,20 @@ async function aplicarConfiguracao() {
       vigenciaFim: null
     });
 
-    // Salva nas configurações
-    await putItem('settings', { key: 'colaborador_configurado', value: colabConfig });
+    await putItem('settings', { 
+      key: 'colaborador_configurado', 
+      value: colabConfig 
+    });
     
     showToast('Configuração aplicada com sucesso!', 'success');
     aguardandoConfirmacao.value = false;
+    colaboradorRecebido.value = null;
+    motivosRecebidos.value = [];
     await verificarConfiguracao();
 
   } catch (e) {
     console.error(e);
-    showToast(e, 'error');
-    // showToast('Erro ao salvar configuração.', 'error');
+    showToast('Erro ao salvar configuração: ' + e.message, 'error');
   }
 }
 
@@ -259,7 +263,7 @@ async function registrarPonto(motivo) {
   };
 
   try {
-    await addItem('marcacoes', novaMarcacao);
+    await addItem('marcacoes', JSON.parse(JSON.stringify(novaMarcacao)));
     await carregarDados();
     if (navigator.vibrate) navigator.vibrate(50);
     showToast('Ponto registrado!', 'success');
@@ -390,7 +394,6 @@ async function confirmarSincronizacao() {
         <p>Configure seu aplicativo</p>
       </header>
 
-      <!-- Tela 1: Botão para abrir a câmera -->
       <div v-if="!configurando && !aguardandoConfirmacao" class="card text-center">
         <div class="icon-large">📲</div>
         <h2>Configuração Inicial</h2>
@@ -400,7 +403,6 @@ async function confirmarSincronizacao() {
         </button>
       </div>
 
-      <!-- Tela 2: Câmera ativa -->
       <div v-if="configurando" class="card camera-card">
         <div id="reader-config" class="camera-reader"></div>
         <div class="config-status">
@@ -411,7 +413,6 @@ async function confirmarSincronizacao() {
         <button @click="configurando = false" class="btn btn-outline btn-block" style="margin-top: 12px;">Cancelar</button>
       </div>
 
-      <!-- Tela 3: Revisão antes de aplicar -->
       <div v-if="aguardandoConfirmacao" class="card">
         <h2 class="section-title" style="text-align: center;">✅ Revisão da Configuração</h2>
         
@@ -444,7 +445,7 @@ async function confirmarSincronizacao() {
       </div>
     </div>      
       
-    <!-- APP NORMAL (APÓS CONFIGURADO) -->
+    <!-- APP NORMAL -->
     <div v-else>
       <header class="app-header" style="margin-bottom: 16px;">
         <h1>Olá, {{ colaboradorAtualNome.split(' ')[0] }}</h1>
@@ -456,7 +457,6 @@ async function confirmarSincronizacao() {
         <button :class="{ active: abaAtiva === 'sincronizar' }" @click="abaAtiva = 'sincronizar'">Sincronizar</button>
       </div>
 
-      <!-- ABA BATER PONTO -->
       <div v-if="abaAtiva === 'ponto'">
         <div class="status-panel card">
           <div class="status-content">
@@ -496,10 +496,8 @@ async function confirmarSincronizacao() {
         </div>
       </div>
 
-      <!-- ABA SINCRONIZAR -->
       <div v-if="abaAtiva === 'sincronizar'">
         <div class="card text-center" v-if="diasPendentes.length > 0">
-          
           <p class="desc" v-if="!qrCodeDataUrl">
             Você tem <strong>{{ diasPendentes.reduce((acc, d) => acc + d.marcacoes.length, 0) }} pontos</strong> pendentes.
           </p>
@@ -538,7 +536,7 @@ async function confirmarSincronizacao() {
 </template>
 
 <style scoped>
-/* Estilos de Configuração */
+/* Estilos mantidos do arquivo anterior */
 .config-screen { max-width: 600px; margin: 0 auto; }
 .icon-large { font-size: 3rem; margin-bottom: 16px; }
 .text-center { text-align: center; }
@@ -567,7 +565,6 @@ async function confirmarSincronizacao() {
 }
 .config-status p { margin: 4px 0; font-size: 0.9rem; font-weight: 600; }
 
-/* Revisão */
 .review-section {
   margin-bottom: 20px;
   background: #f8fafc;
@@ -607,7 +604,6 @@ async function confirmarSincronizacao() {
 .colab-review p { margin: 4px 0; font-size: 0.95rem; }
 .review-actions { margin-top: 24px; }
 
-/* Abas */
 .tabs-container {
   display: flex;
   background: #f1f5f9;
@@ -633,7 +629,6 @@ async function confirmarSincronizacao() {
   box-shadow: var(--shadow-sm);
 }
 
-/* Painel de Status */
 .status-panel {
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
   color: white;
@@ -649,7 +644,6 @@ async function confirmarSincronizacao() {
 .status-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; opacity: 0.8; }
 .status-time { font-size: 1.5rem; font-weight: 800; }
 
-/* Botões de Ação */
 .actions-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
 .btn-action {
   display: flex; flex-direction: column; justify-content: center; align-items: center;
@@ -662,7 +656,6 @@ async function confirmarSincronizacao() {
 .btn-entrada { background: var(--color-success); }
 .btn-pausa { background: var(--color-warning); }
 
-/* Histórico */
 .history-list { list-style: none; padding: 0; margin: 0; }
 .history-list li { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
 .history-time { font-weight: 800; font-size: 1.1rem; }
@@ -670,7 +663,6 @@ async function confirmarSincronizacao() {
 .history-motivo.trabalho { background: var(--color-success-light); color: #065f46; }
 .history-motivo.pausa { background: var(--color-warning-light); color: #92400e; }
 
-/* QR Code */
 .qr-area { display: flex; flex-direction: column; align-items: center; margin-top: 20px; }
 .qr-container { position: relative; display: inline-block; }
 .qr-image { width: 100%; max-width: 300px; border-radius: var(--radius-md); box-shadow: var(--shadow-md); border: 1px solid #e2e8f0; }
