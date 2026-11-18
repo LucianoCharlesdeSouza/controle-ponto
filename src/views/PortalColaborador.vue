@@ -31,6 +31,7 @@ const intervaloTimer = ref(null);
 const tempoPausa = 2200; // Tempo em milissegundos que cada QR Code fica na tela
 const loteAtualQrCodes = ref([]); // Todos os QR Codes gerados do lote
 const indiceQrCodeAtual = ref(0);
+const cicloCompleto = ref(false);
 
 onMounted(async () => {
   await verificarConfiguracao();
@@ -224,6 +225,7 @@ async function gerarQRCode() {
         atual: i + 1,
         total: pacotes.length
       },
+      cicloCompleto: false,
       marcacoes: pacotes[i].map(m => ({
         id: m.id,
         dataHoraLocal: m.dataHoraLocal,
@@ -254,19 +256,14 @@ async function gerarQRCode() {
 }
 
 function iniciarTransmissao() {
-  if (intervaloTimer.value) clearInterval(intervaloTimer.value);
+  pararTransmissao(); // Limpa qualquer timer antigo
   
   intervaloTimer.value = setInterval(() => {
-    if (indiceQrCodeAtual.value < loteAtualQrCodes.value.length - 1) {
-      indiceQrCodeAtual.value++;
-      qrCodeDataUrl.value = loteAtualQrCodes.value[indiceQrCodeAtual.value];
-      if (navigator.vibrate) navigator.vibrate(20); // Leve vibração a cada troca
-    } else {
-      // Chegou no final, para a transmissão e mostra o botão de finalizar
-      pararTransmissao();
-      // Mostra o último QR Code na tela para garantir que o admin leia o último
-      qrCodeDataUrl.value = loteAtualQrCodes.value[loteAtualQrCodes.value.length - 1];
-    }
+    // Loop infinito
+    indiceQrCodeAtual.value = (indiceQrCodeAtual.value + 1) % loteAtualQrCodes.value.length;
+    qrCodeDataUrl.value = loteAtualQrCodes.value[indiceQrCodeAtual.value];
+    
+    if (navigator.vibrate) navigator.vibrate(20);
   }, tempoPausa);
 }
 
@@ -479,8 +476,8 @@ async function confirmarSincronizacao() {
             <p class="qr-hint">Aponte a câmera do administrador. Ele lerá automaticamente.</p>
             
             <div class="qr-actions">
-              <button v-if="!isTransmitindo" @click="confirmarSincronizacao" class="btn btn-success btn-block">
-                ✅ Finalizar Envio
+               <button @click="confirmarSincronizacao" class="btn btn-success btn-block">
+                ✅ Admin já leu tudo
               </button>
               <button @click="cancelarSincronizacao" class="btn btn-outline btn-block" style="margin-top: 8px;">
                 Cancelar
@@ -619,4 +616,23 @@ async function confirmarSincronizacao() {
   cursor: pointer;
 }
 .btn-page:disabled { opacity: 0.3; }
+
+.qr-container {
+  position: relative;
+  display: inline-block;
+}
+
+.qr-progress {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(37, 99, 235, 0.9);
+  color: white;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
 </style>

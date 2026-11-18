@@ -21,6 +21,10 @@ const todasMarcacoesExistentes = ref([]);
 const editandoIndex = ref(null); // { colabIdx, marcIdx }
 const formEdicao = ref(null);
 
+const pacotesRecebidos = ref(new Set()); 
+const totalPacotesEsperados = ref(0);
+const leituraCompleta = ref(false);
+
 onMounted(async () => {
   motivos.value = (await getAllItems('motivos')).sort((a, b) => a.ordem - b.ordem);
   todasMarcacoesExistentes.value = await getAllItems('marcacoes');
@@ -34,6 +38,11 @@ onUnmounted(() => {
 // --- LEITOR DE QR CODE ---
 
 function iniciarLeitor() {
+
+  pacotesRecebidos.value.clear();
+  totalPacotesEsperados.value = 0;
+  leituraCompleta.value = false;
+  
   leitorAtivo.value = true;
   statusLeitura.value = 'idle';
   
@@ -70,10 +79,80 @@ async function pararLeitor() {
     await html5QrcodeScanner.clear().catch(e => console.error(e));
     html5QrcodeScanner = null;
   }
+
+  pacotesRecebidos.value.clear();
+  totalPacotesEsperados.value = 0;
+  leituraCompleta.value = false;
   leitorAtivo.value = false;
 }
 
+// async function onScanSuccess(decodedText, decodedResult) {
+//   statusLeitura.value = 'success';
+
+//   try {
+//     const jsonString = await descriptografarDados(decodedText);
+//     const jsonLimpo = jsonString.trim().replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+//     const pacote = JSON.parse(jsonLimpo);
+
+//     if (pacote.app !== 'PontoFolha') throw new Error('App inválido');
+
+//     // Verifica se este dia já foi lido (para não duplicar no staging)
+//     const diaJaLido = staging.value.some(s => 
+//       s.colaboradorId === pacote.colaboradorId && 
+//       s.marcacoes.some(m => m.dataHoraLocal.startsWith(pacote.marcacoes[0].dataHoraLocal.split('T')[0]))
+//     );
+
+//     if (diaJaLido) {
+//       showToast('Este dia já está na lista de revisão.', 'error');
+//       setTimeout(() => { statusLeitura.value = 'idle'; }, 2000);
+//       return;
+//     }
+
+//     // Verifica se as marcações já existem no banco real
+//     const marcasFiltradas = pacote.marcacoes.filter(m => 
+//       !todasMarcacoesExistentes.value.some(existente => existente.id === m.id)
+//     );
+
+//     if (marcasFiltradas.length === 0) {
+//       showToast('Todas as marcações deste dia já estão sincronizadas.', 'info');
+//       setTimeout(() => { statusLeitura.value = 'idle'; }, 2000);
+//       return;
+//     }
+
+//     // Adiciona ao staging
+//     staging.value.push({
+//       stagingId: uuidv4(),
+//       colaboradorId: pacote.colaboradorId,
+//       colaboradorNome: pacote.colaboradorNome,
+//       marcacoes: marcasFiltradas.map(m => ({
+//         ...m,
+//         motivoNome: motivos.value.find(mot => mot.id === m.motivoId)?.nome || 'Desconhecido',
+//         isNova: true // Flag para controle
+//       }))
+//     });
+
+//     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+//     showToast(`Dia ${pacote.paginacao?.atual} de ${pacote.paginacao?.total} adicionado à revisão!`, 'success', false);
+
+//     setTimeout(() => { statusLeitura.value = 'idle'; }, 2000);
+
+//     // Se for a última página do QR Code, para a câmera
+//     if (pacote.paginacao && pacote.paginacao.atual === pacote.paginacao.total) {
+//       await pararLeitor();
+//       showToast('Todos os dias foram lidos! Revise e confirme a importação.', 'success');
+//     }
+
+//   } catch (e) {
+//     console.error(e);
+//     statusLeitura.value = 'error';
+//     showToast('Erro: ' + (e.message || 'Falha ao ler QR Code'), 'error', false);
+//     setTimeout(() => { statusLeitura.value = 'idle'; }, 3000);
+//   }
+// }
+
 async function onScanSuccess(decodedText, decodedResult) {
+  if (leituraCompleta.value) return; // Ignora se já terminou
+
   statusLeitura.value = 'success';
   
   try {
@@ -83,57 +162,60 @@ async function onScanSuccess(decodedText, decodedResult) {
     
     if (pacote.app !== 'PontoFolha') throw new Error('App inválido');
 
-    // Verifica se este dia já foi lido (para não duplicar no staging)
-    const diaJaLido = staging.value.some(s => 
-      s.colaboradorId === pacote.colaboradorId && 
-      s.marcacoes.some(m => m.dataHoraLocal.startsWith(pacote.marcacoes[0].dataHoraLocal.split('T')[0]))
-    );
-    
-    if (diaJaLido) {
-      showToast('Este dia já está na lista de revisão.', 'error');
-      setTimeout(() => { statusLeitura.value = 'idle'; }, 2000);
-      return;
+    // Registra o total esperado
+    if (pacote.paginacao && pacote.paginacao.total > 0) {
+      totalPacotesEsperados.value = pacote.paginacao.total;
     }
 
-    // Verifica se as marcações já existem no banco real
+    const idPacote = `${pacote.colaboradorId}-${pacote.paginacao.atual}`;
+
+    // Se o pacote já foi lido, ignora (isso é essencial porque está em loop)
+    if (pacotesRecebidos.value.has(idPacote)) {
+      return; 
+    }
+
+    // Filtra marcações que já existem no banco
     const marcasFiltradas = pacote.marcacoes.filter(m => 
       !todasMarcacoesExistentes.value.some(existente => existente.id === m.id)
     );
 
-    if (marcasFiltradas.length === 0) {
-      showToast('Todas as marcações deste dia já estão sincronizadas.', 'info');
-      setTimeout(() => { statusLeitura.value = 'idle'; }, 2000);
-      return;
+    if (marcasFiltradas.length > 0) {
+      // Adiciona ao staging
+      staging.value.push({
+        stagingId: uuidv4(),
+        colaboradorId: pacote.colaboradorId,
+        colaboradorNome: pacote.colaboradorNome,
+        marcacoes: marcasFiltradas.map(m => ({
+          ...m,
+          motivoNome: motivos.value.find(mot => mot.id === m.motivoId)?.nome || 'Desconhecido',
+          isNova: true
+        }))
+      });
     }
 
-    // Adiciona ao staging
-    staging.value.push({
-      stagingId: uuidv4(),
-      colaboradorId: pacote.colaboradorId,
-      colaboradorNome: pacote.colaboradorNome,
-      marcacoes: marcasFiltradas.map(m => ({
-        ...m,
-        motivoNome: motivos.value.find(mot => mot.id === m.motivoId)?.nome || 'Desconhecido',
-        isNova: true // Flag para controle
-      }))
-    });
+    pacotesRecebidos.value.add(idPacote); // Marca este pacote como lido
+    if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
 
-    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-    showToast(`Dia ${pacote.paginacao?.atual} de ${pacote.paginacao?.total} adicionado à revisão!`, 'success', false);
-    
-    setTimeout(() => { statusLeitura.value = 'idle'; }, 2000);
+    // Mostra o progresso
+    const lidos = pacotesRecebidos.value.size;
+    showToast(`Recebido ${lidos} de ${totalPacotesEsperados.value} pacotes...`, 'success', false);
 
-    // Se for a última página do QR Code, para a câmera
-    if (pacote.paginacao && pacote.paginacao.atual === pacote.paginacao.total) {
+    setTimeout(() => { statusLeitura.value = 'idle'; }, 500);
+
+    // Verifica se leu TUDO
+    if (lidos === totalPacotesEsperados.value) {
+      leituraCompleta.value = true;
       await pararLeitor();
-      showToast('Todos os dias foram lidos! Revise e confirme a importação.', 'success');
+      showToast('🎉 Leitura Completa! Todos os pontos foram recebidos.', 'success');
+      setTimeout(() => {
+        showToast('Revise os dados abaixo e confirme a importação.', 'info');
+      }, 3000);
     }
 
   } catch (e) {
-    console.error(e);
+    // Se der erro, apenas pisca vermelho
     statusLeitura.value = 'error';
-    showToast('Erro: ' + (e.message || 'Falha ao ler QR Code'), 'error', false);
-    setTimeout(() => { statusLeitura.value = 'idle'; }, 3000);
+    setTimeout(() => { statusLeitura.value = 'idle'; }, 1000);
   }
 }
 
@@ -263,6 +345,21 @@ async function confirmarImportacaoFinal() {
     <div v-if="leitorAtivo" class="card camera-card">
       <div class="camera-feedback" :class="statusLeitura"></div>        
       <div id="reader" class="camera-reader"></div>
+
+      <!-- Barra de progresso no topo -->
+      <div v-if="totalPacotesEsperados > 0" class="progress-bar-container">
+        <div class="progress-text">
+          Lendo: {{ pacotesRecebidos.size }} / {{ totalPacotesEsperados }} pacotes
+        </div>
+        <div class="progress-bar-bg">
+          <div 
+            class="progress-bar-fill" 
+            :style="{ width: (pacotesRecebidos.size / totalPacotesEsperados) * 100 + '%' }"
+          ></div>
+        </div>
+      </div>
+      
+      
       <p class="camera-hint">
         Aponte para o QR Code. O leitor permanece ativo até a última página ser lida.
       </p>
@@ -273,8 +370,14 @@ async function confirmarImportacaoFinal() {
 
     <!-- Área de Staging (Revisão) -->
     <div v-if="staging.length > 0" class="staging-area">
-      <div class="staging-header">
+      <!-- <div class="staging-header">
         <h2 class="section-title">📋 Revisão ({{ staging.length }} dia(s))</h2>
+        <button v-if="!leitorAtivo" @click="iniciarLeitor" class="btn btn-outline" style="padding: 6px 12px; font-size: 0.8rem;">
+          + Ler Mais
+        </button>
+      </div> -->
+      <div class="staging-header">
+        <h2 class="section-title">📋 Revisão ({{ staging.reduce((acc, g) => acc + g.marcacoes.length, 0) }} pontos)</h2>
         <button v-if="!leitorAtivo" @click="iniciarLeitor" class="btn btn-outline" style="padding: 6px 12px; font-size: 0.8rem;">
           + Ler Mais
         </button>
@@ -441,4 +544,31 @@ async function confirmarImportacaoFinal() {
 .modal-actions { display: flex; gap: 12px; }
 .modal-actions .btn { flex: 1; }
 @keyframes popIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* Barra de progresso sobreposta na câmera */
+.progress-bar-container {
+  background: white;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.progress-text {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 8px;
+  text-align: center;
+}
+.progress-bar-bg {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--color-success);
+  transition: width 0.3s ease;
+  border-radius: var(--radius-full);
+}
 </style>
