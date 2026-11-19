@@ -227,6 +227,15 @@ function formatarData(isoStr) {
         </div>
         <div class="menu-arrow">→</div>
       </router-link>
+
+      <router-link to="/receber-motivos" class="menu-link" style="margin-top: 8px;">
+        <div class="menu-icon">📷</div>
+        <div class="menu-text">
+          <strong>Receber Motivos via QR Code</strong>
+          <span>Importar motivos de outro dispositivo sem sobrescrever</span>
+        </div>
+        <div class="menu-arrow">→</div>
+      </router-link>       
     </div>
 
     <div class="card">

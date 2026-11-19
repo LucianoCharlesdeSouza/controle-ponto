@@ -9,6 +9,7 @@ import Motivos from '../views/Motivos.vue'
 import PortalColaborador from '../views/PortalColaborador.vue'
 import SincronizarAdmin from '../views/SincronizarAdmin.vue'
 import GerarQRCodes from '../views/GerarQRCodes.vue'
+import ReceberMotivos from '../views/ReceberMotivos.vue'
 
 
 const router = createRouter({
@@ -76,13 +77,20 @@ const router = createRouter({
       meta: { title: 'Configurar Celular' }
     },
     {
+      path: '/receber-motivos',
+      name: 'receber-motivos',
+      component: ReceberMotivos,
+      meta: { title: 'Receber Motivos' }
+    },    
+    {
       path: '/app-a',
       component: () => import('@/webrtc-sync/pages/AppA.vue'),
     },
     {
       path: '/app-b',
       component: () => import('@/webrtc-sync/pages/AppB.vue'),
-    },    
+    },
+    
 
 
   ],
