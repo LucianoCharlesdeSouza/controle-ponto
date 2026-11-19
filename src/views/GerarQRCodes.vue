@@ -68,7 +68,8 @@ async function iniciarMotivos() {
         id: m.id,
         nome: m.nome,
         natureza: m.natureza,
-        ordem: m.ordem
+        ordem: m.ordem,
+        ativo: m.ativo !== false // Garante que se for undefined, vira true
       }))
     };
     const url = await QRCode.toDataURL(JSON.stringify(pacote), {

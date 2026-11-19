@@ -55,7 +55,9 @@ async function verificarConfiguracao() {
 
   if (colaboradorSalvo && colaboradorSalvo.value && motivosSalvos.length > 0) {
     colaborador.value = colaboradorSalvo.value;
-    motivos.value = motivosSalvos.sort((a, b) => a.ordem - b.ordem);
+    motivos.value = motivosSalvos
+      .filter(m => m.ativo !== false)
+      .sort((a, b) => a.ordem - b.ordem);
     isConfigurado.value = true;
     await carregarDados();
   } else {
@@ -153,7 +155,10 @@ async function aplicarConfiguracao() {
 
     // Salva os motivos copiando os IDs originais do admin
     for (const m of motivosRecebidos.value) {
-      await putItem('motivos', clonar(m));
+      await putItem('motivos', clonar({
+        ...m,
+        ativo: m.ativo !== false // Garante que undefined vira true
+      }));
     }
 
     // Salva o colaborador copiando o ID original do admin
